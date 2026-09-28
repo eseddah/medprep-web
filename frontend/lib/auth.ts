@@ -28,6 +28,13 @@ export const register = async (payload: { name: string; email: string; password:
   return data;
 };
 
+export const googleLogin = async (credential: string) => {
+  const { data } = await api.post('/auth/google', { credential });
+  localStorage.setItem('medprep_token', data.token);
+  localStorage.setItem('medprep_user', JSON.stringify(data.user));
+  return data;
+};
+
 export const logout = () => {
   localStorage.removeItem('medprep_token');
   localStorage.removeItem('medprep_user');

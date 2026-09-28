@@ -14,7 +14,6 @@ const ChatMessage = require('./models/ChatMessage');
 const ChatRoom = require('./models/ChatRoom');
 
 const app = express();
-connectDB();
 
 app.use(helmet());
 const localDevOrigins = process.env.NODE_ENV === 'production' ? [] : [
@@ -171,4 +170,10 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`🚀 MedPrep API → http://localhost:${PORT}`));
+
+async function startServer() {
+  await connectDB();
+  server.listen(PORT, () => console.log(`🚀 MedPrep API → http://localhost:${PORT}`));
+}
+
+startServer();

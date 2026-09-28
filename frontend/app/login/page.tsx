@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import ThemeToggle from '@/components/ui/ThemeToggle';
+import GoogleButton from '@/components/GoogleButton';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -44,6 +45,12 @@ export default function LoginPage() {
               {loading ? 'Signing in…' : 'Sign In'}
             </Button>
           </form>
+          <div className="flex items-center gap-3 my-4">
+  <div className="h-px flex-1 bg-border" />
+  <span className="text-[12px] text-text3">OR</span>
+  <div className="h-px flex-1 bg-border" />
+</div>
+<GoogleButton />
           <p className="text-center text-[13px] text-text3 mt-5">
             No account? <Link href="/register" className="text-accent hover:underline">Create one free</Link>
           </p>
