@@ -8,25 +8,26 @@ const sign = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: proce
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
-  const { error } = Joi.object({
-    name:     Joi.string().min(2).max(60).required(),
-    email:    Joi.string().email().required(),
+  const { error, value } = Joi.object({
+    name:     Joi.string().trim().min(2).max(60).required(),
+    email:    Joi.string().trim().lowercase().email().required(),
     password: Joi.string().min(6).required(),
     school:   Joi.string().allow('').optional(),
     year:     Joi.string().allow('').optional(),
-  }).validate(req.body);
+  }).validate(req.body, { abortEarly: true, stripUnknown: true });
   if (error) return res.status(400).json({ error: error.details[0].message });
 
-  const exists = await User.findOne({ email: req.body.email });
+  const exists = await User.findOne({ email: value.email });
   if (exists) return res.status(409).json({ error: 'Email already registered' });
 
-  const user = await User.create(req.body);
+  const user = await User.create({ ...value, name: value.name.trim() });
   res.status(201).json({ token: sign(user._id), user: user.toPublic() });
 });
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const { password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
   const user = await User.findOne({ email, isDeleted: false });

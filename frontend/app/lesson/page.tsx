@@ -1,53 +1,83 @@
 'use client';
 import { useState, useRef } from 'react';
+import { useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import { COURSES } from '@/lib/courses';
 import toast from 'react-hot-toast';
-
-function fmt(text: string) {
-  return text.split('\n').map((line,i) => {
-    if (!line.trim()) return <div key={i} className="h-2"/>;
-    if (line.startsWith('# ')) return <h3 key={i} className="font-dm-serif text-[20px] text-text mt-6 mb-2">{line.slice(2)}</h3>;
-    if (line.startsWith('## ')) return <p key={i} className="font-semibold text-text text-[14px] mt-3 mb-1">{line.slice(3)}</p>;
-    if (line.startsWith('> ')) return <div key={i} className="my-2 p-3 rounded-r-lg text-[13.5px] text-text" style={{background:'rgba(79,142,247,.1)',borderLeft:'3px solid var(--accent)'}}>{line.slice(2)}</div>;
-    if (line.startsWith('- ')||line.startsWith('• ')) return <div key={i} className="flex gap-2 text-[14px] text-text2 leading-relaxed pl-3"><span className="text-accent flex-shrink-0">·</span>{line.slice(2)}</div>;
-    return <p key={i} className="text-[14px] text-text2 leading-[1.75] mb-1">{line}</p>;
-  });
-}
+import { formatLesson } from '@/lib/lessonContent';
+import { consumeLessonStream } from '@/lib/streamLesson';
+import { useStore } from '@/lib/store';
+import api from '@/lib/api';
+import Link from 'next/link';
+import { Pause, Play } from 'lucide-react';
 
 export default function LessonPage() {
   const [content, setContent] = useState('');
   const [streaming, setStreaming] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [generationError, setGenerationError] = useState('');
+  const [lessonUsage, setLessonUsage] = useState({ used: 0, date: '' });
   const [files, setFiles] = useState<File[]>([]);
   const [topic, setTopic] = useState('');
   const [depth, setDepth] = useState('Standard');
   const fileRef = useRef<HTMLInputElement>(null);
+  const abortController = useRef<AbortController | null>(null);
+  const requestSequence = useRef(0);
+  const user = useStore(state => state.user);
+  const isPro = ['pro', 'annual'].includes(user?.plan || '');
+  const today = new Date().toISOString().slice(0, 10);
+  const lessonsUsedToday = lessonUsage.date === today ? lessonUsage.used : 0;
+  const lessonsRemaining = Math.max(0, 3 - lessonsUsedToday);
+
+  const refreshLessonUsage = async () => {
+    try {
+      const { data } = await api.get('/users/stats');
+      setLessonUsage({ used: data.stats?.dailyConceptsUsed || 0, date: data.stats?.dailyConceptsDate || '' });
+    } catch {}
+  };
+
+  useEffect(() => { void refreshLessonUsage(); }, []);
 
   const addFiles = (list: FileList) => { const a=Array.from(list); setFiles(p=>{const n=new Set(p.map(f=>f.name));return[...p,...a.filter(f=>!n.has(f.name))];});};
   const readFiles = async () => { const r:string[]=[]; for(const f of files){try{r.push(`--- ${f.name} ---\n${(await f.text()).slice(0,6000)}`)}catch{}} return r.join('\n\n'); };
 
-  const generate = async () => {
+  const generate = async (previousContent = '') => {
     const material = await readFiles();
-    if (!material && !topic) { toast.error('Upload files or enter a topic'); return; }
-    setContent(''); setStreaming(true);
+    if (!material && !topic && !previousContent) { toast.error('Upload files or enter a topic'); return; }
+    const sequence = ++requestSequence.current;
+    abortController.current?.abort();
+    const controller = new AbortController();
+    abortController.current = controller;
+    setContent(previousContent); setGenerationError(''); setPaused(false); setStreaming(true);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL||'http://localhost:5000/api'}/ai/lesson`, {
         method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('medprep_token')}`},
-        body: JSON.stringify({ topic, material, depth }),
+        body: JSON.stringify({ topic, material, depth, previousContent }),
+        signal: controller.signal,
       });
-      const reader = res.body!.getReader(); const dec = new TextDecoder();
-      let full = '';
-      while(true){
-        const{done,value}=await reader.read();if(done)break;
-        for(const line of dec.decode(value).split('\n')){
-          if(line.startsWith('data: ')){const d=line.slice(6).trim();if(d==='[DONE]')break;try{const j=JSON.parse(d);if(j.text){full+=j.text;setContent(full);}}catch{}}
-        }
+      let full = previousContent;
+      await consumeLessonStream(res, text => { full += text; setContent(full); });
+      if (!full.trim()) throw new Error('No lesson content was returned. Please try again.');
+      await refreshLessonUsage();
+    } catch(error: any){
+      if (!controller.signal.aborted) {
+        const message = error.message || 'Could not generate the lesson. Please try again.';
+        setGenerationError(message);
+        toast.error(message);
+        await refreshLessonUsage();
       }
-    } catch(e){ toast.error('Failed to generate lesson'); }
-    setStreaming(false);
+    } finally {
+      if (abortController.current === controller) abortController.current = null;
+      if (sequence === requestSequence.current) setStreaming(false);
+    }
+  };
+
+  const pauseGeneration = () => {
+    setPaused(true);
+    abortController.current?.abort();
   };
 
   if (!streaming && !content) return (
@@ -83,7 +113,12 @@ export default function LessonPage() {
             </div>
           </div>
         </Card>
+        {!isPro && <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber/35 bg-amber/10 px-3.5 py-2.5 text-[12px] text-text2">
+          <span>Free plan: 3 concept generations per day · {lessonsRemaining} remaining today</span>
+          <Link href="/billing" className="font-semibold text-accent hover:underline">Upgrade for unlimited lessons</Link>
+        </div>}
         <Button variant="primary" onClick={generate}>📖 Generate Lesson</Button>
+        {generationError && <p role="alert" className="mt-3 text-[13px] text-red">{generationError}</p>}
       </div>
     </DashboardLayout>
   );
@@ -92,11 +127,16 @@ export default function LessonPage() {
     <DashboardLayout title="Live Lesson" sub={streaming?'Streaming…':'Lesson ready'}>
       <div className="max-w-3xl page-anim">
         <div className="flex justify-between items-center mb-5">
-          {streaming?<div className="flex items-center gap-2 text-[13px] text-text2"><Spinner size={14} color="var(--accent)"/>Generating lesson…</div>:<span className="text-[13px]" style={{color:'var(--green)'}}>✓ Lesson ready</span>}
-          {!streaming&&<Button size="sm" variant="ghost" onClick={()=>{setContent('');setStreaming(false);}}>Generate New</Button>}
+          {streaming
+            ? <div className="flex items-center gap-2 text-[13px] text-text2"><Spinner size={14} color="var(--accent)"/>Generating lesson…<Button size="sm" variant="ghost" onClick={pauseGeneration}><Pause size={14}/>Pause</Button></div>
+            : paused
+              ? <div className="flex items-center gap-2"><span className="text-[13px] text-amber">Paused · partial lesson saved</span><Button size="sm" variant="ghost" onClick={()=>generate(content)}><Play size={14}/>Resume</Button></div>
+              : <span className="text-[13px]" style={{color:'var(--green)'}}>✓ Lesson ready</span>}
+          {!streaming&&!paused&&<Button size="sm" variant="ghost" onClick={()=>{setContent('');setGenerationError('');setStreaming(false);}}>Generate New</Button>}
         </div>
         <Card>
-          {fmt(content)}
+          {formatLesson(content)}
+          {generationError && <div role="alert" className="mt-4 rounded-lg border border-red/40 bg-red/10 p-4 text-[13px] text-red">{generationError}</div>}
           {streaming&&<span className="inline-block w-2 h-3.5 ml-0.5 align-middle" style={{background:'var(--accent)',animation:'blink .8s step-end infinite'}}/>}
         </Card>
       </div>

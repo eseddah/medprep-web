@@ -8,6 +8,7 @@ import { useStore } from '@/lib/store';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { logout } from '@/lib/auth';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 
 type Tab = 'profile'|'password'|'preferences'|'billing'|'data'|'danger';
 
@@ -146,6 +147,13 @@ export default function SettingsPage() {
             <Card>
               <h3 className="font-dm-serif text-[18px] text-text mb-5">Study Preferences</h3>
               <div className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+                  <div>
+                    <div className="text-[14px] text-text">Color theme</div>
+                    <div className="text-[12px] text-text3">Choose a light or dark appearance</div>
+                  </div>
+                  <ThemeToggle />
+                </div>
                 <div>
                   <label className="block text-[12px] text-text3 mb-1.5">Default Quiz Count</label>
                   <select value={prefs.defaultQuizCount || 20} onChange={e => setPrefs((p:any) => ({...p, defaultQuizCount:parseInt(e.target.value)}))} className="bg-surface2 border border-border2 text-text rounded-lg px-3 py-2 text-[13px] outline-none" style={{fontFamily:'var(--font-outfit)'}}>
@@ -187,11 +195,6 @@ export default function SettingsPage() {
               </div>
               <div className="flex gap-3 flex-wrap">
                 <Button variant="primary" onClick={() => window.location.href='/billing'}>Manage Plan</Button>
-                {['pro','annual'].includes(user?.plan||'') && (
-                  <Button variant="ghost" onClick={async () => {
-                    try { const {data} = await api.post('/billing/stripe/portal'); window.location.href = data.url; } catch { toast.error('Could not open billing portal'); }
-                  }}>Open Billing Portal</Button>
-                )}
               </div>
             </Card>
           )}

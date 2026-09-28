@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from './Sidebar';
 import { useStore } from '@/lib/store';
 import { getStoredUser } from '@/lib/auth';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 
 export default function DashboardLayout({ children, title, sub }: { children: React.ReactNode; title: string; sub?: string }) {
   const router = useRouter();
@@ -27,17 +28,20 @@ export default function DashboardLayout({ children, title, sub }: { children: Re
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <div className="flex-1 flex flex-col overflow-auto">
-        <div className="px-8 py-4 border-b border-border bg-surface flex items-center justify-between flex-shrink-0">
+      <div className="flex-1 min-w-0 flex flex-col overflow-auto">
+        <div className="px-5 md:px-8 py-4 border-b border-border bg-surface flex items-center justify-between gap-4 flex-shrink-0">
           <div>
             <h1 className="font-dm-serif text-[20px] text-text">{title}</h1>
             {sub && <p className="text-[12px] text-text3 mt-0.5">{sub}</p>}
           </div>
-          {['pro','annual'].includes(user.plan) ? null : (
-            <a href="/billing" className="px-4 py-2 rounded-lg text-[13px] font-semibold text-black" style={{ background:'linear-gradient(135deg,var(--amber),#e8912a)' }}>✨ Upgrade to Pro</a>
-          )}
+          <div className="flex items-center gap-2 md:gap-3">
+            <ThemeToggle />
+            {['pro','annual'].includes(user.plan) ? null : (
+              <a href="/billing" className="px-3 md:px-4 py-2 rounded-lg text-[12px] md:text-[13px] font-semibold text-white whitespace-nowrap" style={{ background:'var(--accent)' }}>Upgrade to Pro</a>
+            )}
+          </div>
         </div>
-        <main className="flex-1 p-8 max-w-[1100px] w-full page-anim">
+        <main className="flex-1 p-4 md:p-8 max-w-[1280px] w-full page-anim">
           {children}
         </main>
       </div>

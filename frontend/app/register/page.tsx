@@ -7,6 +7,7 @@ import { useStore } from '@/lib/store';
 import toast from 'react-hot-toast';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -26,12 +27,13 @@ export default function RegisterPage() {
       toast.success('Account created! Welcome to MedPrep 🎉');
       router.push('/courses');
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Registration failed');
+      toast.error(err.response?.data?.error || (err.code === 'ERR_NETWORK' ? 'Unable to reach the server. Check your connection and try again.' : 'Registration failed. Please try again.'));
     } finally { setLoading(false); }
   };
 
   return (
-    <div className="min-h-screen bg-bg flex items-center justify-center px-4 py-10">
+    <div className="relative min-h-screen bg-bg flex items-center justify-center px-4 py-16 sm:py-10">
+      <div className="absolute top-4 right-4"><ThemeToggle /></div>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="font-dm-serif text-[32px] text-text mb-1">Med<span className="text-accent">Prep</span></h1>
@@ -39,9 +41,9 @@ export default function RegisterPage() {
         </div>
         <div className="bg-surface border border-border rounded-2xl p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input label="Full Name" placeholder="Dr. Jane Doe" value={form.name} onChange={set('name')} required />
-            <Input label="Email" type="email" placeholder="you@email.com" value={form.email} onChange={set('email')} required />
-            <Input label="Password" type="password" placeholder="min. 6 characters" value={form.password} onChange={set('password')} required />
+            <Input label="Full Name" autoComplete="name" placeholder="Dr. Jane Doe" value={form.name} onChange={set('name')} required />
+            <Input label="Email" type="email" autoComplete="email" placeholder="you@email.com" value={form.email} onChange={set('email')} required />
+            <Input label="Password" type="password" autoComplete="new-password" placeholder="min. 6 characters" value={form.password} onChange={set('password')} required />
             <Input label="School (optional)" placeholder="e.g. University of Ghana Medical School" value={form.school} onChange={set('school')} />
             <div>
               <label className="block text-[12px] text-text3 mb-1.5">Year (optional)</label>

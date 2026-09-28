@@ -2,6 +2,8 @@ const router = require('express').Router();
 const { protect } = require('../middleware/auth');
 const User = require('../models/User');
 const Progress = require('../models/Progress');
+const ChatMessage = require('../models/ChatMessage');
+const ChatRoom = require('../models/ChatRoom');
 
 // GET /api/users/stats
 router.get('/stats', protect, async (req, res) => {
@@ -64,6 +66,14 @@ router.delete('/account', protect, async (req, res) => {
   // Soft delete
   await User.findByIdAndUpdate(req.user._id, { isDeleted: true, email: `deleted_${user._id}_${user.email}` });
   await Progress.deleteMany({ user: req.user._id });
+  await ChatMessage.deleteMany({ sender: req.user._id });
+  const ownedRooms = await ChatRoom.find({ createdBy: req.user._id }).select('_id');
+  const ownedRoomIds = ownedRooms.map(room => room._id.toString());
+  if (ownedRoomIds.length) {
+    await ChatMessage.deleteMany({ room: { $in: ownedRoomIds } });
+    await ChatRoom.deleteMany({ _id: { $in: ownedRooms.map(room => room._id) } });
+  }
+  await ChatRoom.updateMany({ members: req.user._id }, { $pull: { members: req.user._id } });
   res.json({ message: 'Account deleted successfully' });
 });
 

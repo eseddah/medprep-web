@@ -4,6 +4,46 @@ export interface Course {
   image: string; staticImages: string[]; topics: string[];
 }
 
+const COURSE_MEDIA: Record<string, string> = {
+  '1201_Overview_of_Neuron.jpg': 'https://upload.wikimedia.org/wikipedia/commons/7/75/Rat_primary_cortical_neuron_culture%2C_deconvolved_z-stack_overlay_%2830614937102%29.jpg',
+  '201_DNA_Replication.jpg': 'https://upload.wikimedia.org/wikipedia/commons/8/8c/DNA_replication.png',
+  'Acute_myocardial_infarction_with_coagulation_necrosis_%281%29.jpg': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Histological_features_of_myocardial_infarction_with_reperfusion.jpg/960px-Histological_features_of_myocardial_infarction_with_reperfusion.jpg',
+  'Benzene_structure.svg': 'https://upload.wikimedia.org/wikipedia/commons/1/1f/Resonance-structure-of-benzene-1.png',
+  'Blausen_0800_ReceptorTypes.png': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/4/44/Neutralizing_antibodies_for_treating_COVID-19.tif/lossy-page1-960px-Neutralizing_antibodies_for_treating_COVID-19.tif.jpg',
+  'Cerebrum_lobes.svg': 'https://upload.wikimedia.org/wikipedia/commons/d/d8/Cerebrum_lobes.svg',
+  'Covalent_bond_hydrogen.svg': 'https://upload.wikimedia.org/wikipedia/commons/1/19/Covalent_bond_hydrogen.svg',
+  'Diagram_of_the_human_heart_%28cropped%29.svg': 'https://upload.wikimedia.org/wikipedia/commons/e/e5/Diagram_of_the_human_heart_%28cropped%29.svg',
+  'Glycolysis_overview.svg': 'https://upload.wikimedia.org/wikipedia/commons/d/d5/Glycolysis_overview.svg',
+  'Gram_stain_01.jpg': 'https://upload.wikimedia.org/wikipedia/commons/8/8f/Gram_stain_01.jpg',
+  'Gray1124.png': 'https://upload.wikimedia.org/wikipedia/commons/d/de/Gray1124.png',
+  'Kaplan-Meier_Plot.png': 'https://upload.wikimedia.org/wikipedia/commons/7/73/Km_plot.jpg',
+  'Kidney_nephron_molar_transport_diagram.svg': 'https://upload.wikimedia.org/wikipedia/commons/2/26/Kidney_nephron_molar_transport_diagram.svg',
+  'Laminar_and_turbulent_flow.jpg': 'https://upload.wikimedia.org/wikipedia/commons/4/47/Laminar_and_turbulent_flow.png',
+  'Maslow%27s_Hierarchy_of_Needs2.svg': 'https://upload.wikimedia.org/wikipedia/commons/e/ea/Maslow%27s_Hierarchy_of_Needs2.svg',
+  'Mitosis_cells_sequence.svg': 'https://upload.wikimedia.org/wikipedia/commons/e/e8/Mitosis_cells_sequence.svg',
+  'Periodic_table_large.svg': 'https://upload.wikimedia.org/wikipedia/commons/4/4d/Periodic_table_large.svg',
+  'Pharmacokinetics_parameters.png': 'https://upload.wikimedia.org/wikipedia/commons/8/87/Dextroamphetamine_concentration-time_curves_after_oral_administration_of_equimolar_doses_of_dextroamphetamine_and_lisdexamfetamine_in_adults.png',
+  'Prokaryote_cell_diagram.svg': 'https://upload.wikimedia.org/wikipedia/commons/9/99/Prokaryote_cell_diagram.svg',
+  'PurkinjeCell.jpg': 'https://upload.wikimedia.org/wikipedia/commons/1/15/PurkinjeCell.jpg',
+  'Simple_Normal_Distribution.svg': 'https://upload.wikimedia.org/wikipedia/commons/d/d2/Gaussian_distribution_2.jpg',
+  'Skeletal_muscle.jpg': 'https://upload.wikimedia.org/wikipedia/commons/c/c0/Skeletal_muscle.jpg',
+};
+const COURSE_MEDIA_BY_TITLE = Object.fromEntries(
+  Object.entries(COURSE_MEDIA).map(([filename, imageUrl]) => [decodeURIComponent(filename), imageUrl]),
+);
+
+export function courseImageUrl(source: string) {
+  try {
+    const url = new URL(source);
+    if (url.hostname === 'upload.wikimedia.org' && url.pathname.includes('/thumb/')) {
+      const segments = url.pathname.split('/');
+      const originalName = decodeURIComponent(segments[segments.length - 2]);
+      return COURSE_MEDIA_BY_TITLE[originalName] || source;
+    }
+  } catch {}
+  return source;
+}
+
 export const COURSES: Course[] = [
   { id:'anatomy', icon:'🫀', title:'Human Anatomy', cat:'Medical', color:'#f76f6f', free:true,
     desc:'Comprehensive study of body structures from gross anatomy to microanatomy.',
@@ -40,7 +80,7 @@ export const COURSES: Course[] = [
     image:'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/1201_Overview_of_Neuron.jpg/300px-1201_Overview_of_Neuron.jpg',
     staticImages:[],
     topics:['Innate Immunity','Adaptive Immunity','T & B Lymphocytes','MHC & Antigen Presentation','Hypersensitivity Reactions','Autoimmune Diseases','Immunodeficiencies','Vaccines'] },
-  { id:'neuro', icon:'🧠', title:'Neuroscience', cat:'Medical', color:'#f76f6f', free:false,
+  { id:'neuro', icon:'🧠', title:'Neurology', cat:'Medical', color:'#f76f6f', free:false,
     desc:'Brain, spinal cord, and peripheral nervous system in health and disease.',
     image:'https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/PurkinjeCell.jpg/400px-PurkinjeCell.jpg',
     staticImages:['https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Cerebrum_lobes.svg/300px-Cerebrum_lobes.svg.png'],
@@ -75,7 +115,68 @@ export const COURSES: Course[] = [
     image:'https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Simple_Normal_Distribution.svg/400px-Simple_Normal_Distribution.svg.png',
     staticImages:['https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/Kaplan-Meier_Plot.png/300px-Kaplan-Meier_Plot.png'],
     topics:['Descriptive Statistics','Probability & Distributions','Hypothesis Testing','Confidence Intervals','Regression Analysis','Study Design','Bias & Confounding','Epidemiological Measures'] },
+  { id:'genetics', icon:'🧬', title:'Medical Genetics', cat:'Medical', color:'#367a70', free:false,
+    desc:'Inheritance, gene regulation, genomic medicine, and the molecular basis of disease.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/201_DNA_Replication.jpg/400px-201_DNA_Replication.jpg', staticImages:[],
+    topics:['Mendelian Inheritance','Pedigree Analysis','Chromosomal Disorders','Molecular Diagnostics','Gene Regulation','Epigenetics','Population Genetics','Pharmacogenomics'] },
+  { id:'histology', icon:'🔬', title:'Histology', cat:'Medical', color:'#bd6d57', free:false,
+    desc:'Tissue architecture and microscopic structure across organ systems.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Gram_stain_01.jpg/400px-Gram_stain_01.jpg', staticImages:[],
+    topics:['Epithelial Tissue','Connective Tissue','Blood & Bone Marrow','Muscle Tissue','Nervous Tissue','Cardiovascular Histology','Renal Histology','Gastrointestinal Histology'] },
+  { id:'renal', icon:'🫘', title:'Renal Medicine', cat:'Medical', color:'#4f8c88', free:false,
+    desc:'Kidney structure, fluid and electrolyte balance, and renal disease.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Kidney_nephron_molar_transport_diagram.svg/400px-Kidney_nephron_molar_transport_diagram.svg.png', staticImages:[],
+    topics:['Nephron Physiology','Glomerular Filtration','Tubular Transport','Acid–Base Disorders','Electrolyte Disorders','Acute Kidney Injury','Chronic Kidney Disease','Glomerular Disease'] },
+  { id:'gastro', icon:'🩺', title:'Gastroenterology', cat:'Medical', color:'#c07b42', free:false,
+    desc:'Digestive physiology, diagnostic reasoning, and gastrointestinal disease.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Gray1124.png/400px-Gray1124.png', staticImages:[],
+    topics:['Esophageal Disorders','Peptic Ulcer Disease','Inflammatory Bowel Disease','Liver Function & Cirrhosis','Pancreatic Disease','Malabsorption','GI Bleeding','Colorectal Disease'] },
+  { id:'hematology', icon:'🩸', title:'Hematology', cat:'Medical', color:'#9c4f55', free:false,
+    desc:'Blood cell development, coagulation, anemia, and hematologic malignancy.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Acute_myocardial_infarction_with_coagulation_necrosis_%281%29.jpg/400px-Acute_myocardial_infarction_with_coagulation_necrosis_%281%29.jpg', staticImages:[],
+    topics:['Hematopoiesis','Microcytic Anemia','Macrocytic Anemia','Hemolysis','Coagulation & Thrombosis','Platelet Disorders','Leukemia & Lymphoma','Transfusion Medicine'] },
+  { id:'pediatrics', icon:'🧸', title:'Paediatrics', cat:'Medical', color:'#668c62', free:false,
+    desc:'Development, preventive care, and common conditions from newborn to adolescent.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Skeletal_muscle.jpg/400px-Skeletal_muscle.jpg', staticImages:[],
+    topics:['Newborn Assessment','Growth & Development','Immunization','Pediatric Respiratory Disease','Congenital Heart Disease','Pediatric Infections','Nutrition & Feeding','Adolescent Health'] },
+  { id:'obstetrics', icon:'🤰', title:'Obstetrics & Gynaecology', cat:'Medical', color:'#a85e78', free:false,
+    desc:'Reproductive health, pregnancy, childbirth, and common gynaecologic conditions.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/1/19/Gray1124.png/400px-Gray1124.png', staticImages:[],
+    topics:['Reproductive Endocrinology','Prenatal Care','Maternal Physiology','Labor & Delivery','Hypertensive Disorders of Pregnancy','Obstetric Emergencies','Contraception','Gynaecologic Neoplasia'] },
+  { id:'dermatology', icon:'🩹', title:'Dermatology', cat:'Medical', color:'#b47b52', free:false,
+    desc:'Skin structure, lesion recognition, inflammatory disease, and cutaneous oncology.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Acute_myocardial_infarction_with_coagulation_necrosis_%281%29.jpg/400px-Acute_myocardial_infarction_with_coagulation_necrosis_%281%29.jpg', staticImages:[],
+    topics:['Skin Anatomy','Primary Lesions','Eczematous Disorders','Papulosquamous Disease','Skin Infections','Drug Eruptions','Pigmentary Disorders','Skin Cancer'] },
+  { id:'epidemiology', icon:'📈', title:'Epidemiology', cat:'Medical', color:'#5b8073', free:false,
+    desc:'Study design, causal inference, screening, and population-level disease patterns.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Simple_Normal_Distribution.svg/400px-Simple_Normal_Distribution.svg.png', staticImages:[],
+    topics:['Incidence & Prevalence','Cohort Studies','Case-Control Studies','Randomized Trials','Confounding & Bias','Diagnostic Test Accuracy','Screening','Outbreak Investigation'] },
+  { id:'oncology', icon:'🎗️', title:'Oncology', cat:'Medical', color:'#8b627d', free:false,
+    desc:'Cancer biology, staging, treatment principles, and supportive care.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Acute_myocardial_infarction_with_coagulation_necrosis_%281%29.jpg/400px-Acute_myocardial_infarction_with_coagulation_necrosis_%281%29.jpg', staticImages:[],
+    topics:['Cancer Hallmarks','Tumor Suppressors & Oncogenes','Cancer Staging','Chemotherapy Principles','Targeted Therapy','Immunotherapy','Cancer Screening','Oncologic Emergencies'] },
+  { id:'embryology', icon:'🌱', title:'Embryology', cat:'Medical', color:'#76916a', free:false,
+    desc:'Early development, organogenesis, and the origins of congenital anomalies.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Mitosis_cells_sequence.svg/400px-Mitosis_cells_sequence.svg.png', staticImages:[],
+    topics:['Gametogenesis','Fertilization & Implantation','Germ Layers','Neurulation','Cardiac Development','Limb Development','Placenta & Fetal Membranes','Congenital Anomalies'] },
+  { id:'cardiology', icon:'❤️', title:'Cardiology', cat:'Medical', color:'#b35458', free:false,
+    desc:'Cardiovascular physiology, ECG interpretation, and evidence-based cardiac care.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Diagram_of_the_human_heart_%28cropped%29.svg/400px-Diagram_of_the_human_heart_%28cropped%29.svg.png',
+    staticImages:['https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Diagram_of_the_human_heart_%28cropped%29.svg/300px-Diagram_of_the_human_heart_%28cropped%29.svg.png'],
+    topics:['Cardiac Cycle','ECG Interpretation','Ischemic Heart Disease','Heart Failure','Arrhythmias','Valvular Disease','Congenital Heart Disease','Hypertension'] },
+  { id:'radiology', icon:'🩻', title:'Radiology', cat:'Medical', color:'#5c7485', free:false,
+    desc:'Imaging fundamentals, modality selection, and systematic image interpretation.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Cerebrum_lobes.svg/400px-Cerebrum_lobes.svg.png', staticImages:[],
+    topics:['Radiograph Fundamentals','Chest X-ray','Abdominal Imaging','CT Principles','MRI Principles','Ultrasound','Neuroimaging','Radiation Safety'] },
+  { id:'algebra', icon:'➗', title:'Algebra', cat:'Premed', color:'#497c78', free:true,
+    desc:'A rigorous foundation in equations, functions, modeling, and quantitative reasoning.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Simple_Normal_Distribution.svg/400px-Simple_Normal_Distribution.svg.png', staticImages:[],
+    topics:['Linear Equations & Inequalities','Systems of Equations','Polynomials & Factoring','Rational Expressions','Exponents & Radicals','Functions & Graphs','Exponential & Logarithmic Models','Word Problems & Dimensional Analysis'] },
+  { id:'calculus', icon:'∫', title:'Calculus', cat:'Premed', color:'#526f9b', free:false,
+    desc:'Limits, derivatives, integrals, and multivariable ideas with worked applications.',
+    image:'https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Simple_Normal_Distribution.svg/400px-Simple_Normal_Distribution.svg.png', staticImages:[],
+    topics:['Limits & Continuity','Derivative Rules','Optimization','Related Rates','Definite Integrals','Fundamental Theorem of Calculus','Differential Equations','Multivariable Calculus'] },
 ];
 
-export const QUIZ_LIMITS = { free: 10, pro: 100, annual: 150 };
+export const QUIZ_LIMITS = { free: 10, pro: 150, annual: 250 };
 export const FLASH_LIMITS = { free: 15, pro: 100, annual: 150 };

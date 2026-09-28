@@ -18,7 +18,8 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401 && typeof window !== 'undefined') {
+    const isPublicAuthRequest = /\/auth\/(login|register)(\?|$)/.test(err.config?.url || '');
+    if (err.response?.status === 401 && !isPublicAuthRequest && typeof window !== 'undefined') {
       localStorage.removeItem('medprep_token');
       localStorage.removeItem('medprep_user');
       window.location.href = '/login';

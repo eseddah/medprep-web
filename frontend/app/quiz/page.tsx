@@ -65,7 +65,7 @@ export default function QuizPage() {
         <div className="max-w-2xl page-anim">
           {plan === 'free' && (
             <div className="rounded-xl p-4 mb-5 text-[13px]" style={{background:'rgba(245,166,35,.08)',border:'1px solid rgba(245,166,35,.25)',color:'var(--amber)'}}>
-              ⚡ Free plan: up to 10 questions/session. <a href="/billing" className="font-semibold underline">Upgrade to Pro</a> for 100 questions.
+              ⚡ Free plan: up to 10 questions/session. <a href="/billing" className="font-semibold underline">Upgrade to Pro</a> for 150 questions, or 250 annually.
             </div>
           )}
           <Card className="mb-5">
@@ -101,7 +101,7 @@ export default function QuizPage() {
               <div>
                 <label className="block text-[12px] text-text3 mb-1.5">Questions (max {maxQ})</label>
                 <select value={count} onChange={e=>setCount(Math.min(parseInt(e.target.value),maxQ))} className="w-full bg-surface2 border border-border2 text-text rounded-lg px-3 py-2 text-[13px] outline-none" style={{fontFamily:'var(--font-outfit)'}}>
-                  {[10,20,30,50,75,100,150].filter(n=>n<=maxQ).map(n=><option key={n} value={n}>{n}</option>)}
+                  {[10,20,30,50,75,100,150,200,250].filter(n=>n<=maxQ).map(n=><option key={n} value={n}>{n}</option>)}
                 </select>
               </div>
               <div>

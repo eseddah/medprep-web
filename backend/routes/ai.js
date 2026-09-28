@@ -3,11 +3,20 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { protect, requirePro } = require('../middleware/auth');
 const User = require('../models/User');
 const Progress = require('../models/Progress');
+const COURSES = require('../lib/coursesData');
+const { markStudyDay, reserveDailyConcept, releaseDailyConcept, FREE_DAILY_CONCEPT_LIMIT } = require('../lib/studyActivity');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
+const AI_SETUP_ERROR = 'AI generation is not configured. Add a valid ANTHROPIC_API_KEY to backend/.env and restart the API.';
+
+function hasConfiguredAnthropicKey() {
+  const key = process.env.ANTHROPIC_API_KEY?.trim() || '';
+  return Boolean(key && !/your_|placeholder|\.\.\.|<.*>/i.test(key));
+}
 
 // Question limits by plan
-const QUIZ_LIMITS = { free: 10, pro: 100, annual: 150 };
+const QUIZ_LIMITS = { free: 10, pro: 150, annual: 250 };
 const FLASH_LIMITS = { free: 15, pro: 100, annual: 150 };
 
 // POST /api/ai/quiz  — generate quiz questions
@@ -18,6 +27,7 @@ router.post('/quiz', protect, async (req, res) => {
   const requested = Math.min(parseInt(count) || 20, maxQ);
 
   if (!topic && !material) return res.status(400).json({ error: 'Topic or material required' });
+  if (!hasConfiguredAnthropicKey()) return res.status(503).json({ error: AI_SETUP_ERROR });
 
   const system = `You are an expert medical educator. Generate exactly ${requested} ${type || 'Multiple Choice'} quiz questions at ${difficulty || 'Medium'} difficulty.
 ${courseId ? `Course context: ${courseId}` : ''}
@@ -32,8 +42,8 @@ Make questions clinically accurate, high-yield, and exam-relevant.`;
 
   try {
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
+      model: AI_MODEL,
+      max_tokens: 24000,
       system,
       messages: [{ role: 'user', content: userMsg }],
     });
@@ -42,6 +52,7 @@ Make questions clinically accurate, high-yield, and exam-relevant.`;
 
     // Track stats
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'stats.quizzesCompleted': 1 } });
+    await markStudyDay(req.user._id);
 
     res.json({ questions, count: questions.length, plan, maxAllowed: maxQ });
   } catch (e) {
@@ -57,6 +68,7 @@ router.post('/flashcards', protect, async (req, res) => {
   const requested = Math.min(parseInt(count) || 20, maxF);
 
   if (!topic && !material) return res.status(400).json({ error: 'Topic or material required' });
+  if (!hasConfiguredAnthropicKey()) return res.status(503).json({ error: AI_SETUP_ERROR });
 
   const system = `You are a medical education expert. Create exactly ${requested} high-yield flashcards.
 Focus on key definitions, mechanisms, clinical pearls, mnemonics, and exam-relevant facts.
@@ -69,7 +81,7 @@ Return ONLY valid JSON array:
 
   try {
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: AI_MODEL,
       max_tokens: 8000,
       system,
       messages: [{ role: 'user', content: userMsg }],
@@ -78,6 +90,7 @@ Return ONLY valid JSON array:
     const cards = JSON.parse(raw);
 
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'stats.flashcardsStudied': cards.length } });
+    await markStudyDay(req.user._id);
     res.json({ cards, count: cards.length, plan, maxAllowed: maxF });
   } catch (e) {
     res.status(500).json({ error: 'Failed to generate flashcards: ' + e.message });
@@ -87,46 +100,134 @@ Return ONLY valid JSON array:
 // POST /api/ai/lesson  — streaming
 router.post('/lesson', protect, async (req, res) => {
   const { topic, courseId, material, depth } = req.body;
+  const previousContent = typeof req.body.previousContent === 'string' ? req.body.previousContent.slice(-12000) : '';
   if (!topic && !material) return res.status(400).json({ error: 'Topic or material required' });
+  if (!hasConfiguredAnthropicKey()) return res.status(503).json({ error: AI_SETUP_ERROR });
+  const quota = await reserveDailyConcept(req.user._id);
+  if (!quota.allowed) {
+    return res.status(429).json({
+      error: `The Free plan includes ${FREE_DAILY_CONCEPT_LIMIT} concept generations per day. Upgrade to Pro for unlimited lessons.`,
+      remaining: 0,
+      limit: FREE_DAILY_CONCEPT_LIMIT,
+      upgrade: true,
+    });
+  }
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  const abortController = new AbortController();
+  res.on('close', () => {
+    if (!res.writableEnded) abortController.abort();
+  });
 
-  const system = `You are an expert medical educator. Create a ${depth || 'standard'} structured lesson${topic ? ` on "${topic}"` : ''}.
+  const system = `You are a careful medical, science, and mathematics educator. Create a comprehensive ${depth || 'deep-dive'} lesson${topic ? ` on "${topic}"` : ''}.
+Teach for durable understanding, not a short summary. Assume the learner needs a self-contained chapter: establish prerequisites, define technical vocabulary, explain the normal model before exceptions, connect each mechanism step by step to its outcomes, and distinguish established facts from useful simplifications. Be detailed and specific to the requested topic; do not pad with unrelated facts or invent sources.
+${previousContent ? 'The learner paused an earlier generation. Continue from the supplied partial lesson without repeating it. Finish the interrupted section, then continue the remaining material.' : ''}
 Format:
 # Section Title
 ## Subsection
 > Clinical pearl / high-yield point
 - Bullet points
-Regular paragraphs.
-Include: mechanisms, pathophysiology, clinical relevance, mnemonics, exam tips. Be thorough.`;
+Regular explanatory paragraphs.
+Use Markdown tables for comparisons and fenced text blocks for at least one labeled concept map, process diagram, or ASCII illustration. Include learning objectives, prerequisites, foundational concepts, detailed mechanisms, pathophysiology or derivations, a fully worked example, clinical or real-world relevance, common misconceptions, retrieval questions with answers, and exam tips. For calculations, show every step and units. For clinical topics, label scenarios as educational and never present them as personal medical advice.`;
 
-  const userMsg = material
-    ? `Study material:\n${material.slice(0, 8000)}`
-    : `Teach me about: ${topic}. Use standard medical/premed curriculum.`;
+  const userMsg = previousContent
+    ? `Continue this partially generated lesson without repeating its existing sections. Continue the interrupted thought and complete the remaining lesson:\n\n${previousContent}`
+    : material
+      ? `Study material:\n${material.slice(0, 8000)}`
+      : `Teach me about: ${topic}. Use standard medical/premed curriculum.`;
 
   try {
     const stream = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
+      model: AI_MODEL,
+      max_tokens: 8000,
       stream: true,
       system,
       messages: [{ role: 'user', content: userMsg }],
-    });
+    }, { signal: abortController.signal });
 
     for await (const event of stream) {
+      if (abortController.signal.aborted) break;
       if (event.type === 'content_block_delta' && event.delta?.text) {
         res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
       }
     }
 
+    if (abortController.signal.aborted) {
+      await releaseDailyConcept(req.user._id);
+      return;
+    }
+
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'stats.lessonsGenerated': 1 } });
+    await markStudyDay(req.user._id);
     res.write(`data: [DONE]\n\n`);
     res.end();
   } catch (e) {
-    res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
-    res.end();
+    await releaseDailyConcept(req.user._id).catch(() => {});
+    if (abortController.signal.aborted) return;
+    console.error('Lesson generation failed:', e.message);
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ error: 'Lesson generation failed. Please retry in a moment.' })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    }
+  }
+});
+
+// POST /api/ai/tutor — Pro-only conversational teaching
+router.post('/tutor', protect, requirePro, async (req, res) => {
+  const messages = Array.isArray(req.body.messages)
+    ? req.body.messages
+      .filter(message => ['user', 'assistant'].includes(message?.role) && typeof message?.content === 'string')
+      .slice(-16)
+      .map(message => ({ role: message.role, content: message.content.trim().slice(0, 4000) }))
+    : [];
+  if (!messages.length || messages[messages.length - 1].role !== 'user') {
+    return res.status(400).json({ error: 'Send a question to start a tutoring turn' });
+  }
+  if (!hasConfiguredAnthropicKey()) return res.status(503).json({ error: AI_SETUP_ERROR });
+  const context = typeof req.body.context === 'string' ? req.body.context.trim().slice(0, 180) : '';
+
+  try {
+    const response = await anthropic.messages.create({
+      model: AI_MODEL,
+      max_tokens: 3000,
+      system: `You are MedPrep Tutor, a patient Socratic tutor for medical, premed, and mathematics learners. ${context ? `Current course context: ${context}.` : ''} Answer accurately and clearly, first diagnose the learner’s confusion, then explain concepts in ordered steps with a small worked example or a fenced text diagram/table when useful. Ask one focused follow-up question at the end. When a learner provides course notes, ground the explanation in those notes. Do not claim that your answer is externally source-verified and never invent citations or URLs. For clinical topics, use educational framing and do not diagnose real people.`,
+      messages,
+    });
+    res.json({ message: response.content.filter(block => block.type === 'text').map(block => block.text).join('\n') });
+  } catch (error) {
+    res.status(502).json({ error: 'The tutor is temporarily unavailable. Please try again.' });
+  }
+});
+
+// POST /api/ai/case — educational, synthetic case rounds for both tracks
+router.post('/case', protect, async (req, res) => {
+  const track = req.body.track === 'premed' ? 'Premed' : req.body.track === 'medical' ? 'Medical' : '';
+  const course = COURSES.find(item => item.id === req.body.courseId);
+  const topic = typeof req.body.topic === 'string' ? req.body.topic.trim().slice(0, 160) : '';
+  if (!track || !course || course.cat !== track || !topic) {
+    return res.status(400).json({ error: 'Choose a course and topic in the selected study track' });
+  }
+  if (!hasConfiguredAnthropicKey()) return res.status(503).json({ error: AI_SETUP_ERROR });
+
+  try {
+    const response = await anthropic.messages.create({
+      model: AI_MODEL,
+      max_tokens: 5000,
+      system: `Create a synthetic educational ${track.toLowerCase()} case round for a student studying ${course.title}, focused on ${topic}. This is coursework, not guidance for a real patient. Use a short, plausible vignette and 3 progressive decision steps. For premed courses, use a clinical or laboratory context to teach foundational biology, chemistry, physics, psychology, or mathematics. Make explanations rigorous, teach the underlying concepts, and do not invent citations. Return only valid JSON with this shape: {"title":"...","caseStem":"...","learningObjectives":["..."],"illustration":"A concise plain-text concept flow using arrows","steps":[{"prompt":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"..."}],"debrief":"..."}. Include exactly 3 steps, each with 4 options and detailed rationales.`,
+      messages: [{ role: 'user', content: `Track: ${track}\nCourse: ${course.title}\nTopic: ${topic}\nCreate the case now.` }],
+    });
+    const raw = response.content.filter(block => block.type === 'text').map(block => block.text).join('').replace(/```(?:json)?|```/g, '').trim();
+    const caseStudy = JSON.parse(raw);
+    if (!Array.isArray(caseStudy.steps) || caseStudy.steps.length !== 3 || caseStudy.steps.some(step => !Array.isArray(step.options) || step.options.length !== 4 || !Number.isInteger(step.correctIndex) || !step.explanation)) {
+      return res.status(502).json({ error: 'The case did not meet the expected format. Please generate another.' });
+    }
+    await markStudyDay(req.user._id);
+    res.json({ caseStudy, course: course.title, topic, track: track.toLowerCase() });
+  } catch {
+    res.status(502).json({ error: 'Could not generate this case. Please try again.' });
   }
 });
 
@@ -134,6 +235,7 @@ Include: mechanisms, pathophysiology, clinical relevance, mnemonics, exam tips. 
 router.post('/save-progress', protect, async (req, res) => {
   const { courseId, topic, type, score, total } = req.body;
   await Progress.create({ user: req.user._id, courseId, topic, type, score, total, completed: true });
+  await markStudyDay(req.user._id);
   res.json({ saved: true });
 });
 

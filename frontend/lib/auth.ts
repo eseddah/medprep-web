@@ -15,14 +15,14 @@ export interface User {
 }
 
 export const login = async (email: string, password: string) => {
-  const { data } = await api.post('/auth/login', { email, password });
+  const { data } = await api.post('/auth/login', { email: email.trim().toLowerCase(), password });
   localStorage.setItem('medprep_token', data.token);
   localStorage.setItem('medprep_user', JSON.stringify(data.user));
   return data;
 };
 
 export const register = async (payload: { name: string; email: string; password: string; school?: string; year?: string }) => {
-  const { data } = await api.post('/auth/register', payload);
+  const { data } = await api.post('/auth/register', { ...payload, name: payload.name.trim(), email: payload.email.trim().toLowerCase() });
   localStorage.setItem('medprep_token', data.token);
   localStorage.setItem('medprep_user', JSON.stringify(data.user));
   return data;

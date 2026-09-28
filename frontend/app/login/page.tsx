@@ -7,6 +7,7 @@ import { useStore } from '@/lib/store';
 import toast from 'react-hot-toast';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
+import ThemeToggle from '@/components/ui/ThemeToggle';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,12 +24,13 @@ export default function LoginPage() {
       toast.success(`Welcome back, ${user.name}!`);
       router.push('/courses');
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Login failed');
+      toast.error(err.response?.data?.error || (err.code === 'ERR_NETWORK' ? 'Unable to reach the server. Check your connection and try again.' : 'Login failed. Please check your details and try again.'));
     } finally { setLoading(false); }
   };
 
   return (
-    <div className="min-h-screen bg-bg flex items-center justify-center px-4">
+    <div className="relative min-h-screen bg-bg flex items-center justify-center px-4 pt-16 sm:pt-4">
+      <div className="absolute top-4 right-4"><ThemeToggle /></div>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="font-dm-serif text-[32px] text-text mb-1">Med<span className="text-accent">Prep</span></h1>
@@ -36,8 +38,8 @@ export default function LoginPage() {
         </div>
         <div className="bg-surface border border-border rounded-2xl p-8">
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input label="Email" type="email" placeholder="you@email.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required />
-            <Input label="Password" type="password" placeholder="••••••••" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required />
+            <Input label="Email" type="email" autoComplete="email" placeholder="you@email.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required />
+            <Input label="Password" type="password" autoComplete="current-password" placeholder="••••••••" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required />
             <Button type="submit" variant="primary" full disabled={loading}>
               {loading ? 'Signing in…' : 'Sign In'}
             </Button>

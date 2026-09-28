@@ -12,8 +12,6 @@ const userSchema = new mongoose.Schema({
   school:    { type: String, default: '' },
   year:      { type: String, default: '' },
   // Billing
-  stripeCustomerId:     String,
-  stripeSubscriptionId: String,
   paystackCustomerId:   String,
   planExpiresAt:        Date,
   // Preferences
@@ -29,6 +27,8 @@ const userSchema = new mongoose.Schema({
     quizzesCompleted:   { type: Number, default: 0 },
     flashcardsStudied:  { type: Number, default: 0 },
     lessonsGenerated:   { type: Number, default: 0 },
+    dailyConceptsUsed:  { type: Number, default: 0 },
+    dailyConceptsDate:  { type: String, default: '' },
     totalScore:         { type: Number, default: 0 },
     streak:             { type: Number, default: 0 },
     lastStudied:        Date,
@@ -49,8 +49,6 @@ userSchema.methods.matchPassword = function(pw) {
 userSchema.methods.toPublic = function() {
   const o = this.toObject();
   delete o.password;
-  delete o.stripeCustomerId;
-  delete o.stripeSubscriptionId;
   return o;
 };
 

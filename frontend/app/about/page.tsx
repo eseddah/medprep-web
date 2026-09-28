@@ -4,10 +4,12 @@ import Card from '@/components/ui/Card';
 import Link from 'next/link';
 
 const FEATURES = [
-  { icon:'🧠', title:'AI Quiz Generator', desc:'Generate 10–150 clinically accurate questions from your own notes or any of our 14 courses. Adjust difficulty, question type, and count per session.' },
+  { icon:'🧠', title:'AI Quiz Generator', desc:'Generate clinically accurate questions from your own notes or any of our 29 courses. Adjust difficulty, question type, and count per session.' },
   { icon:'⚡', title:'Smart Flashcards', desc:'Create high-yield flashcard decks with "Got it / Still learning" tracking, shuffle mode, and progress bars.' },
   { icon:'📖', title:'Live Lessons', desc:'Stream structured AI lessons in real-time on any topic — with clinical pearls, mnemonics, and exam tips.' },
-  { icon:'🎓', title:'14 Full Courses', desc:'8 medical courses (Anatomy to Neuroscience) and 6 premed courses (Bio, Chem, Org Chem, Physics, Psych, Stats).' },
+  { icon:'✨', title:'Pro AI Tutor', desc:'Ask course-aware follow-up questions and work through difficult ideas step by step with examples.' },
+  { icon:'🩺', title:'Case Rounds', desc:'Practice progressive three-step medical and premed scenarios with answer rationales and concept debriefs.' },
+  { icon:'🎓', title:'29 Full Courses', desc:'Medical foundations and specialties, premed sciences, and dedicated algebra and calculus tracks.' },
   { icon:'📂', title:'Upload Your Material', desc:'Upload your own lecture slides, notes, or PDFs and use them as the source for quizzes, flashcards, and lessons.' },
   { icon:'📊', title:'Progress Tracking', desc:'Track quizzes completed, flashcards studied, lessons generated, and your study streak over time.' },
 ];
@@ -17,12 +19,12 @@ const TEAM = [
 ];
 
 const FAQ = [
-  ['Is MedPrep free to use?', 'Yes! The Free plan gives you access to 4 courses (Anatomy, Physiology, Biology, Chemistry), up to 10 quiz questions and 15 flashcards per session, and basic lesson generation.'],
-  ['What does Pro unlock?', 'All 14 courses, up to 100 quiz questions (150 on Annual), 100+ flashcards, unlimited lessons, upload your own material, and MCAT prep mode.'],
-  ['Which payment methods are accepted?', 'We support all major credit/debit cards via Stripe, and mobile money + bank payments via Paystack — ideal for students in Ghana and across Africa.'],
+  ['Is MedPrep free to use?', 'Yes! The Free plan gives you access to 5 courses (Anatomy, Physiology, Biology, Chemistry, Algebra), up to 10 quiz questions, 15 flashcards, and 3 AI concept lessons per day.'],
+  ['What does Pro unlock?', 'All 29 courses, the AI Tutor, up to 150 quiz questions per monthly session (250 annually), 100 flashcards monthly (150 annually), lessons, and study-material uploads.'],
+  ['Which payment methods are accepted?', 'Paystack accepts Ghana cedi card and mobile-money payments.'],
   ['Can I use MedPrep for the MCAT?', 'Absolutely. Our Premed track covers every MCAT content area: Biology, Gen Chem, Org Chem, Physics, Psychology, and Sociology.'],
-  ['How accurate is the AI content?', 'Our AI is powered by Claude (Anthropic) and trained prompts from medical educators. We recommend using it alongside your official curriculum materials.'],
-  ['Can I cancel my subscription?', 'Yes, anytime. You keep Pro access until the end of your billing period with no penalties.'],
+  ['How accurate is the AI content?', 'Lessons, tutor replies, and cases are AI-generated study aids and are not independently source-verified. Check clinical facts against your curriculum, textbooks, and current guidelines; never use them for real-patient decisions.'],
+  ['Does Pro renew automatically?', 'No. Paystack purchases cover the period shown at checkout; access expires at the end of that paid term.'],
 ];
 
 export default function AboutPage() {
@@ -36,7 +38,7 @@ export default function AboutPage() {
           MedPrep is an AI-powered study toolkit designed specifically for medical and premed students. We combine cutting-edge AI with proven study science — active recall, spaced repetition, and structured learning — so you can study smarter, not harder.
         </p>
         <div className="flex justify-center gap-8 mt-6">
-          {[['14','Courses'],['100+','Questions/session'],['150+','Flashcards/session'],['∞','Lessons']].map(([n,l]) => (
+          {[['29','Courses'],['250','Questions/session'],['150','Flashcards/session'],['∞','Lessons']].map(([n,l]) => (
             <div key={l} className="text-center">
               <div className="font-dm-serif text-[28px] text-accent">{n}</div>
               <div className="text-[12px] text-text3">{l}</div>
@@ -57,13 +59,23 @@ export default function AboutPage() {
         ))}
       </div>
 
+      <section className="flex items-center gap-4 md:gap-6 border-y border-border py-6 md:py-8 mb-8">
+        <div className="w-14 h-14 md:w-16 md:h-16 rounded-full shrink-0 flex items-center justify-center text-white font-dm-serif text-[24px]" style={{background:'var(--accent)'}}>E</div>
+        <div>
+          <p className="text-[11px] uppercase tracking-wide text-text3 mb-1">Developer</p>
+          <h3 className="font-dm-serif text-[21px] text-text">EDMOND</h3>
+          <p className="text-[13px] text-text2">BIOCHEMISTRY STUDENT · KNUST</p>
+          <p className="text-[12px] text-text3 mt-1">Email: edmondeddah999gmail.com</p>
+        </div>
+      </section>
+
       {/* How it works */}
       <Card className="mb-8">
         <h3 className="font-dm-serif text-[22px] text-text mb-6">How it works</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
             ['1','Create account','Sign up free in under a minute — no credit card needed.'],
-            ['2','Choose a course or upload','Browse 14 courses or upload your own lecture notes.'],
+            ['2','Choose a course or upload','Browse 29 courses or upload your own lecture notes.'],
             ['3','Study with AI','Generate quizzes, flashcards, or a live streamed lesson.'],
             ['4','Track progress','Watch your scores, streaks, and completion rate grow.'],
           ].map(([n,t,d]) => (
@@ -90,7 +102,7 @@ export default function AboutPage() {
       {/* CTA */}
       <div className="rounded-2xl p-8 text-center" style={{ background:'rgba(79,142,247,0.08)', border:'1px solid rgba(79,142,247,0.25)' }}>
         <h3 className="font-dm-serif text-[22px] text-text mb-2">Ready to study smarter?</h3>
-        <p className="text-text2 text-[14px] mb-5">Unlock all 14 courses and unlimited AI tools with Pro.</p>
+        <p className="text-text2 text-[14px] mb-5">Unlock all 29 courses and expanded AI study tools with Pro.</p>
         <Link href="/billing" className="inline-flex items-center gap-2 px-6 py-3 rounded-lg font-semibold text-white text-[14px]" style={{ background:'var(--accent)' }}>Upgrade to Pro →</Link>
       </div>
     </DashboardLayout>

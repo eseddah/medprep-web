@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Card from '@/components/ui/Card';
@@ -8,23 +8,21 @@ import { useStore } from '@/lib/store';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 
-type Processor = 'stripe' | 'paystack';
 type Cycle = 'monthly' | 'annual';
 
 const PLANS = [
   { id:'free', name:'Free', monthly:0, annual:0, period:'forever',
-    features:['4 Free Courses (Anatomy, Physiology, Biology, Chemistry)','10 quiz questions/session','15 flashcards/session','Basic lesson generation','Community access'],
+    features:['5 Free Courses (Anatomy, Physiology, Biology, Chemistry, Algebra)','10 quiz questions/session','15 flashcards/session','3 AI concept lessons/day','Community access'],
   },
-  { id:'pro', name:'Pro', monthly:12, annual:99, popular:true,
-    features:['All 14 courses unlocked','100 quiz questions/session','100 flashcards/session','Live streaming lessons','Upload your own study material','Progress tracking & stats','MCAT prep mode','Priority support'],
+  { id:'pro', name:'Pro', monthly:50, annual:500, popular:true,
+    features:['All 29 courses unlocked','150 questions monthly · 250 annually','100 flashcards monthly · 150 annually','Interactive NIH 3D model access','Live lessons & study material upload','Progress tracking, analytics & MCAT mode','Priority support'],
   },
 ];
 
-export default function BillingPage() {
+function BillingContent() {
   const { user, updateUser } = useStore();
   const searchParams = useSearchParams();
   const [cycle, setCycle] = useState<Cycle>('monthly');
-  const [processor, setProcessor] = useState<Processor>('paystack');
   const [loading, setLoading] = useState<string|null>(null);
 
   useEffect(() => {
@@ -32,9 +30,6 @@ export default function BillingPage() {
     const ref = searchParams.get('reference') || searchParams.get('trxref');
     if (ref && searchParams.get('ps_success')) {
       verifyPaystack(ref);
-    }
-    if (searchParams.get('success')) {
-      toast.success('Payment successful! Your plan has been upgraded. 🎉');
     }
     if (searchParams.get('cancelled')) {
       toast.error('Payment cancelled.');
@@ -57,13 +52,8 @@ export default function BillingPage() {
     const planType = cycle === 'annual' ? 'pro_annual' : 'pro_monthly';
     setLoading(planId);
     try {
-      if (processor === 'stripe') {
-        const { data } = await api.post('/billing/stripe/checkout', { planType });
-        window.location.href = data.url;
-      } else {
-        const { data } = await api.post('/billing/paystack/initialize', { planType });
-        window.location.href = data.url;
-      }
+      const { data } = await api.post('/billing/paystack/initialize', { planType });
+      window.location.href = data.url;
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Could not start checkout');
     }
@@ -79,30 +69,24 @@ export default function BillingPage() {
         <div>
           <div className="text-[11px] text-text3 uppercase tracking-wide mb-1">Current Plan</div>
           <div className="text-[16px] font-semibold text-text">{user?.plan === 'annual' ? 'Pro Annual' : user?.plan === 'pro' ? 'Pro Monthly' : 'Free'}</div>
-          <div className="text-[12px] text-text3 mt-0.5">{isPro ? 'All courses & tools unlocked' : '4 courses · Limited usage'}</div>
+          <div className="text-[12px] text-text3 mt-0.5">{isPro ? 'All courses & tools unlocked' : '5 courses · Limited usage'}</div>
         </div>
         <span className="text-[11px] font-semibold px-3 py-1 rounded-full" style={ isPro ? { background:'rgba(62,207,142,.15)', color:'var(--green)', border:'1px solid rgba(62,207,142,.3)' } : { background:'rgba(245,166,35,.15)', color:'var(--amber)', border:'1px solid rgba(245,166,35,.3)' }}>
           {isPro ? 'Active' : 'Limited'}
         </span>
       </div>
 
-      {/* Billing cycle + processor */}
+      {/* Billing cycle */}
       <div className="flex flex-wrap gap-6 mb-8">
         <div>
           <p className="text-[12px] text-text3 mb-2">Billing cycle</p>
           <div className="flex gap-2">
             <Button size="sm" variant={cycle==='monthly'?'primary':'ghost'} onClick={()=>setCycle('monthly')}>Monthly</Button>
             <Button size="sm" variant={cycle==='annual'?'primary':'ghost'} onClick={()=>setCycle('annual')}>Annual</Button>
-            {cycle==='annual' && <span className="self-center text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{background:'rgba(62,207,142,.15)',color:'var(--green)',border:'1px solid rgba(62,207,142,.3)'}}>Save 31%</span>}
+            {cycle==='annual' && <span className="self-center text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{background:'rgba(62,207,142,.15)',color:'var(--green)',border:'1px solid rgba(62,207,142,.3)'}}>Save 17%</span>}
           </div>
         </div>
-        <div>
-          <p className="text-[12px] text-text3 mb-2">Payment method</p>
-          <div className="flex gap-2">
-            <Button size="sm" variant={processor==='paystack'?'primary':'ghost'} onClick={()=>setProcessor('paystack')}>🇬🇭 Paystack (GHS / Mobile Money)</Button>
-            <Button size="sm" variant={processor==='stripe'?'primary':'ghost'} onClick={()=>setProcessor('stripe')}>💳 Stripe (USD / Card)</Button>
-          </div>
-        </div>
+        <div className="self-end pb-1 text-[12px] text-text2">Paystack · Ghana cedis · Card or mobile money</div>
       </div>
 
       {/* Plan cards */}
@@ -117,10 +101,10 @@ export default function BillingPage() {
               <div className="mb-4">
                 <div className="text-[15px] font-semibold text-text mb-2">{p.name}</div>
                 <div className="flex items-baseline gap-1">
-                  <span className="font-dm-serif text-[36px] text-text">${price}</span>
+                  <span className="font-dm-serif text-[36px] text-text">{p.id==='free' ? 'GH₵0' : `GH₵${price}`}</span>
                   <span className="text-[13px] text-text3">{p.id==='free' ? 'forever' : cycle==='annual' ? '/yr' : '/mo'}</span>
                 </div>
-                {cycle==='annual' && p.id!=='free' && <div className="text-[12px] text-green mt-1">≈ ${perMonth}/month</div>}
+                {cycle==='annual' && p.id!=='free' && <div className="text-[12px] text-green mt-1">≈ GH₵{perMonth}/month</div>}
               </div>
               <ul className="space-y-2 mb-5">
                 {p.features.map(f => (
@@ -133,9 +117,9 @@ export default function BillingPage() {
               {isCurrent
                 ? <Button full disabled>Current Plan</Button>
                 : p.id === 'free'
-                  ? <Button full variant="ghost" onClick={() => toast('To downgrade, cancel your subscription in the billing portal.')}>Downgrade to Free</Button>
+                    ? <Button full variant="ghost" onClick={() => toast('Contact support before your next renewal to switch to Free.')}>Request Free plan</Button>
                   : <Button full variant="primary" onClick={() => handleUpgrade(p.id)} disabled={loading===p.id}>
-                      {loading===p.id ? 'Redirecting…' : `Upgrade via ${processor === 'paystack' ? 'Paystack' : 'Stripe'}`}
+                      {loading===p.id ? 'Redirecting…' : 'Upgrade with Paystack'}
                     </Button>}
             </div>
           );
@@ -147,8 +131,8 @@ export default function BillingPage() {
         <h3 className="font-dm-serif text-[20px] text-text mb-4">What Pro unlocks</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {[
-            ['🎓','10 Extra Courses','All medical & premed courses'],
-            ['🧠','100 Questions/session','Up to 150 on Annual'],
+            ['🎓','25 Extra Courses','All medical & premed courses'],
+            ['🧠','150 Questions/session','Up to 250 on Annual'],
             ['⚡','100 Flashcards/session','Full decks any topic'],
             ['📖','Unlimited Lessons','Stream AI lessons anytime'],
             ['📂','Upload Your Notes','Use your own PDFs & slides'],
@@ -167,9 +151,9 @@ export default function BillingPage() {
       <Card>
         <h3 className="font-dm-serif text-[20px] text-text mb-4">FAQ</h3>
         {[
-          ['Can I cancel anytime?','Yes. Cancel in settings and keep Pro access until period end.'],
+          ['Does Pro renew automatically?','No. Pro access lasts for the period shown at checkout and expires at the end of that paid term.'],
           ['Is Paystack available in Ghana?','Yes — Paystack supports GHS, mobile money (MTN, Vodafone, AirtelTigo), and bank cards.'],
-          ['What currency does Stripe charge?','Stripe charges in USD. Perfect for international students.'],
+          ['What currency do you charge?','All plan prices are shown and charged in Ghana cedis (GHS) through Paystack.'],
           ['Will I lose my data if I downgrade?','No — all your progress and history is preserved.'],
           ['Is there a student discount?','Email us with your .edu or university ID for 20% off.'],
         ].map(([q,a]) => (
@@ -181,4 +165,8 @@ export default function BillingPage() {
       </Card>
     </DashboardLayout>
   );
+}
+
+export default function BillingPage() {
+  return <Suspense fallback={<div className="min-h-screen bg-bg" />}><BillingContent /></Suspense>;
 }
