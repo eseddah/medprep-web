@@ -66,3 +66,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 :root[data-theme='dark'] .text-accent { color: var(--accent2); }
+
+.katex { color: var(--text); font-size: 1em; }
+.katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 0.25rem 0; }

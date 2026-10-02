@@ -120,7 +120,7 @@ Format:
 > Clinical pearl / high-yield point
 - Bullet points
 Regular explanatory paragraphs.
-Use clean Markdown headings, paragraphs, bold text, numbered lists, bullet lists, and simple tables. ${CLEAN_DIAGRAM_FORMAT} Include learning objectives, prerequisites, foundational concepts, detailed mechanisms, pathophysiology or derivations, a fully worked example, clinical or real-world relevance, common misconceptions, retrieval questions with answers, and exam tips. For calculations, show every step and units. For clinical topics, label scenarios as educational and never present them as personal medical advice.`;
+Use clean Markdown headings, paragraphs, bold text, numbered lists, bullet lists, and simple tables. For mathematical, chemical, or physical notation, use valid LaTeX with $...$ for inline expressions and $$...$$ for display equations; group multi-character superscripts and subscripts in braces, use conventional signs, and define unfamiliar symbols at first use. Never leave LaTeX delimiter commands visible. ${CLEAN_DIAGRAM_FORMAT} Include learning objectives, prerequisites, foundational concepts, detailed mechanisms, pathophysiology or derivations, a fully worked example, clinical or real-world relevance, common misconceptions, retrieval questions with answers, and exam tips. For calculations, show every step and units. For clinical topics, label scenarios as educational and never present them as personal medical advice.`;
 
   const userMsg = previousContent
     ? `Continue this partially generated lesson without repeating its existing sections. Continue the interrupted thought and complete the remaining lesson:\n\n${previousContent}`

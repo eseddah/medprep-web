@@ -1,6 +1,8 @@
 import { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { ArrowDown } from 'lucide-react';
 
 type ContentBlock = { markdown: string } | { steps: string[] };
@@ -59,6 +61,12 @@ function parseLegacyFlow(value: string): string[] | null {
   if (!arrowLines.length) return null;
   const steps = arrowLines.flatMap(line => parseArrowFlow(line) || []);
   return steps.length > 1 ? steps : null;
+}
+
+function normalizeMathDelimiters(text: string) {
+  return text
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_match, expression: string) => `$$${expression}$$`)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_match, expression: string) => `$${expression}$`);
 }
 
 function splitContent(text: string): ContentBlock[] {
@@ -129,7 +137,8 @@ function FlowDiagram({ steps }: { steps: string[] }) {
 function Markdown({ children }: { children: string }) {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[[rehypeKatex, { strict: 'ignore', throwOnError: false }]]}
       components={{
         h1: ({ children }) => <h2 className="mb-3 mt-7 font-dm-serif text-[22px] leading-snug text-text first:mt-0">{children}</h2>,
         h2: ({ children }) => <h3 className="mb-2 mt-6 font-dm-serif text-[19px] leading-snug text-text">{children}</h3>,
@@ -151,7 +160,7 @@ function Markdown({ children }: { children: string }) {
         hr: () => <hr className="my-6 border-border" />,
       }}
     >
-      {children}
+      {normalizeMathDelimiters(children)}
     </ReactMarkdown>
   );
 }
@@ -159,7 +168,8 @@ function Markdown({ children }: { children: string }) {
 export function formatInline(text: string): ReactNode {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[[rehypeKatex, { strict: 'ignore', throwOnError: false }]]}
       components={{
         p: ({ children }) => <>{children}</>,
         strong: ({ children }) => <strong className="font-semibold text-text">{children}</strong>,
@@ -169,7 +179,7 @@ export function formatInline(text: string): ReactNode {
         a: ({ children, href }) => <a href={href} className="font-medium text-accent underline decoration-border2 underline-offset-2">{children}</a>,
       }}
     >
-      {text}
+      {normalizeMathDelimiters(text)}
     </ReactMarkdown>
   );
 }
