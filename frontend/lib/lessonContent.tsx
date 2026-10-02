@@ -5,6 +5,7 @@ function tableCells(line: string) {
 }
 
 export function formatLesson(text: string): ReactNode[] {
+  if (typeof text !== 'string') return [];
   const lines = text.split('\n');
   const output: ReactNode[] = [];
   let codeLines: string[] | null = null;
