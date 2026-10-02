@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import { COURSES, Course } from '@/lib/courses';
 import api from '@/lib/api';
+import { recordStreakActivity } from '@/lib/streak';
 import toast from 'react-hot-toast';
 
 type CaseStep = { prompt: string; options: string[]; correctIndex: number; explanation: string };
@@ -55,9 +56,26 @@ export default function CasesPage() {
   };
 
   const continueCase = () => {
+    if (caseStudy && stepIndex === caseStudy.steps.length - 1) {
+      void recordStreakActivity().catch(() => toast.error('Case complete, but your streak could not be updated.'));
+    }
     setStepIndex(index => index + 1);
     setChoice(null);
     setRevealed(false);
+  };
+
+  const checkAnswer = () => {
+    if (!step || choice === null || !caseStudy) return;
+    setRevealed(true);
+    void api.post('/review/attempt', {
+      courseId: course.id,
+      topic,
+      prompt: `${caseStudy.title}: ${step.prompt}`,
+      options: step.options,
+      correctIndex: step.correctIndex,
+      explanation: step.explanation,
+      isCorrect: choice === step.correctIndex,
+    }).catch(() => toast.error('Your answer was recorded, but review data could not sync.'));
   };
 
   const step = caseStudy?.steps[stepIndex];
@@ -135,7 +153,7 @@ export default function CasesPage() {
                 {revealed && <p className="mt-4 rounded-lg border-l-[3px] border-accent bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-text2">{step.explanation}</p>}
                 <div className="mt-4 flex justify-end">
                   {!revealed
-                    ? <Button variant="primary" size="sm" onClick={() => setRevealed(true)} disabled={choice === null}>Check answer</Button>
+                    ? <Button variant="primary" size="sm" onClick={checkAnswer} disabled={choice === null}>Check answer</Button>
                     : <Button variant="primary" size="sm" onClick={continueCase}>Continue <ChevronRight size={15} /></Button>}
                 </div>
               </>

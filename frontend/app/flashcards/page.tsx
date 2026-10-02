@@ -7,6 +7,8 @@ import Spinner from '@/components/ui/Spinner';
 import { useStore } from '@/lib/store';
 import { COURSES, FLASH_LIMITS } from '@/lib/courses';
 import api from '@/lib/api';
+import { recordStreakActivity } from '@/lib/streak';
+import { getStudyTopicContext } from '@/lib/studyTopics';
 import toast from 'react-hot-toast';
 
 interface FlashCard { front: string; back: string; }
@@ -19,6 +21,9 @@ export default function FlashcardsPage() {
   const [current, setCurrent] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [known, setKnown] = useState(new Set<number>());
+  const [reviewRecorded, setReviewRecorded] = useState(false);
+  const [savedCards, setSavedCards] = useState(new Set<string>());
+  const [savingCard, setSavingCard] = useState(false);
   const [loading, setLoading] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [count, setCount] = useState(Math.min(20, maxF));
@@ -33,7 +38,8 @@ export default function FlashcardsPage() {
     try {
       const material = await readFiles();
       const { data } = await api.post('/ai/flashcards', { topic, material, count });
-      setCards(data.cards); setCurrent(0); setFlipped(false); setKnown(new Set());
+      setCards(data.cards); setCurrent(0); setFlipped(false); setKnown(new Set()); setSavedCards(new Set());
+      setReviewRecorded(false);
     } catch (e:any) { toast.error(e.response?.data?.error || 'Failed'); }
     setLoading(false);
   };
@@ -43,6 +49,28 @@ export default function FlashcardsPage() {
     if (know) k.add(current); else k.delete(current);
     setKnown(k);
     if (current < cards.length-1) { setCurrent(c=>c+1); setFlipped(false); }
+    else if (!reviewRecorded) {
+      setReviewRecorded(true);
+      void recordStreakActivity().catch(() => {
+        setReviewRecorded(false);
+        toast.error('Review complete, but your streak could not be updated.');
+      });
+    }
+  };
+
+  const saveForReview = async () => {
+    if (!card || savingCard || savedCards.has(card.front)) return;
+    setSavingCard(true);
+    const context = getStudyTopicContext(topic, COURSES);
+    try {
+      await api.post('/review/items', { ...context, prompt: card.front, answer: card.back });
+      setSavedCards(previous => new Set(previous).add(card.front));
+      toast.success('Saved to Smart Review');
+    } catch (saveError: any) {
+      toast.error(saveError.response?.data?.error || 'Could not save this card for review');
+    } finally {
+      setSavingCard(false);
+    }
   };
 
   if (!cards.length) return (
@@ -82,11 +110,12 @@ export default function FlashcardsPage() {
   return (
     <DashboardLayout title="Flashcard Deck" sub={`${cards.length} cards · ${known.size} known`}>
       <div className="max-w-xl mx-auto page-anim">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
           <span className="text-[13px] text-text3">Card {current+1} of {cards.length} · <span style={{color:'var(--green)'}}>{known.size} known</span></span>
           <div className="flex gap-2">
             <Button size="sm" variant="ghost" onClick={()=>{setCards(c=>[...c].sort(()=>Math.random()-.5));setCurrent(0);setFlipped(false);}}>🔀</Button>
-            <Button size="sm" variant="ghost" onClick={()=>{setCards([]);setKnown(new Set());}}>↺ Reset</Button>
+            <Button size="sm" variant="ghost" onClick={()=>{setCards([]);setKnown(new Set());setReviewRecorded(false);}}>↺ Reset</Button>
+            <Button size="sm" variant="ghost" onClick={saveForReview} disabled={savingCard || savedCards.has(card.front)}>{savedCards.has(card.front) ? 'Saved' : savingCard ? 'Saving…' : 'Save to Review'}</Button>
           </div>
         </div>
         <div className="h-1 bg-border rounded-full mb-5 overflow-hidden"><div className="h-full bg-green rounded-full transition-all" style={{width:`${Math.round(known.size/cards.length*100)}%`}}/></div>

@@ -11,6 +11,7 @@ import { formatLesson } from '@/lib/lessonContent';
 import { consumeLessonStream } from '@/lib/streamLesson';
 import { useStore } from '@/lib/store';
 import api from '@/lib/api';
+import { recordStreakActivity } from '@/lib/streak';
 import Link from 'next/link';
 import { Pause, Play } from 'lucide-react';
 
@@ -45,6 +46,7 @@ export default function LessonPage() {
   const readFiles = async () => { const r:string[]=[]; for(const f of files){try{r.push(`--- ${f.name} ---\n${(await f.text()).slice(0,6000)}`)}catch{}} return r.join('\n\n'); };
 
   const generate = async (previousContent = '') => {
+    if (typeof previousContent !== 'string') previousContent = '';
     const material = await readFiles();
     if (!material && !topic && !previousContent) { toast.error('Upload files or enter a topic'); return; }
     const sequence = ++requestSequence.current;
@@ -59,8 +61,15 @@ export default function LessonPage() {
         signal: controller.signal,
       });
       let full = previousContent;
-      await consumeLessonStream(res, text => { full += text; setContent(full); });
+      const incomplete = await consumeLessonStream(res, text => { full += text; setContent(full); });
       if (!full.trim()) throw new Error('No lesson content was returned. Please try again.');
+      if (incomplete) {
+        setPaused(true);
+        setGenerationError('The lesson reached its response limit. Resume to continue the lesson.');
+        await refreshLessonUsage();
+        return;
+      }
+      void recordStreakActivity().catch(() => toast.error('Lesson finished, but your streak could not be updated.'));
       await refreshLessonUsage();
     } catch(error: any){
       if (!controller.signal.aborted) {

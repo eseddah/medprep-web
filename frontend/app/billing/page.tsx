@@ -86,7 +86,7 @@ function BillingContent() {
             {cycle==='annual' && <span className="self-center text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{background:'rgba(62,207,142,.15)',color:'var(--green)',border:'1px solid rgba(62,207,142,.3)'}}>Save 17%</span>}
           </div>
         </div>
-        <div className="self-end pb-1 text-[12px] text-text2">Paystack · Ghana cedis · Card or mobile money</div>
+        <div className="self-end max-w-[300px] pb-1 text-[12px] text-text2">Paystack · Ghana cedis · Card or mobile money. PIN approval happens through Paystack and your mobile network.</div>
       </div>
 
       {/* Plan cards */}
@@ -153,6 +153,7 @@ function BillingContent() {
         {[
           ['Does Pro renew automatically?','No. Pro access lasts for the period shown at checkout and expires at the end of that paid term.'],
           ['Is Paystack available in Ghana?','Yes — Paystack supports GHS, mobile money (MTN, Vodafone, AirtelTigo), and bank cards.'],
+          ['How do I approve a mobile-money payment?','Paystack opens a secure checkout. Enter your mobile-money number there, then approve the request using your network’s prompt or instructions. MedPrep never asks for your MoMo PIN.'],
           ['What currency do you charge?','All plan prices are shown and charged in Ghana cedis (GHS) through Paystack.'],
           ['Will I lose my data if I downgrade?','No — all your progress and history is preserved.'],
           ['Is there a student discount?','Email us with your .edu or university ID for 20% off.'],

@@ -12,6 +12,7 @@ const connectDB = require('./lib/db');
 const User = require('./models/User');
 const ChatMessage = require('./models/ChatMessage');
 const ChatRoom = require('./models/ChatRoom');
+const { startStudyReminderScheduler } = require('./lib/studyReminders');
 
 const app = express();
 
@@ -121,6 +122,55 @@ io.on('connection', (socket) => {
       respond({ ok: false, error: 'Message could not be sent' });
     }
   });
+
+  socket.on('chat:edit', async (payload, acknowledge) => {
+    const respond = typeof acknowledge === 'function' ? acknowledge : () => {};
+    const roomId = typeof payload?.roomId === 'string' ? payload.roomId : '';
+    const messageId = typeof payload?.messageId === 'string' ? payload.messageId : '';
+    const text = typeof payload?.text === 'string' ? payload.text.trim() : '';
+    const channel = roomId === 'study-lounge' ? 'study-lounge' : `chat-room:${roomId}`;
+    if (!text || text.length > 2000) return respond({ ok: false, error: 'Messages must contain 1 to 2,000 characters' });
+    if (!messageId || !socket.rooms.has(channel)) return respond({ ok: false, error: 'Join this group before editing messages' });
+    if (roomId !== 'study-lounge') {
+      const membership = await ChatRoom.exists({ _id: roomId, members: socket.data.member.id }).catch(() => null);
+      if (!membership) return respond({ ok: false, error: 'You are no longer a member of this group' });
+    }
+
+    try {
+      const record = await ChatMessage.findOneAndUpdate(
+        { _id: messageId, room: roomId, sender: socket.data.member.id },
+        { $set: { text } },
+        { new: true, runValidators: true },
+      ).populate('sender', 'name avatar').lean();
+      if (!record) return respond({ ok: false, error: 'Message not found or cannot be edited' });
+      const message = toPublicMessage(record);
+      io.to(channel).emit('chat:updated', message);
+      respond({ ok: true });
+    } catch {
+      respond({ ok: false, error: 'Message could not be edited' });
+    }
+  });
+
+  socket.on('chat:delete', async (payload, acknowledge) => {
+    const respond = typeof acknowledge === 'function' ? acknowledge : () => {};
+    const roomId = typeof payload?.roomId === 'string' ? payload.roomId : '';
+    const messageId = typeof payload?.messageId === 'string' ? payload.messageId : '';
+    const channel = roomId === 'study-lounge' ? 'study-lounge' : `chat-room:${roomId}`;
+    if (!messageId || !socket.rooms.has(channel)) return respond({ ok: false, error: 'Join this group before deleting messages' });
+    if (roomId !== 'study-lounge') {
+      const membership = await ChatRoom.exists({ _id: roomId, members: socket.data.member.id }).catch(() => null);
+      if (!membership) return respond({ ok: false, error: 'You are no longer a member of this group' });
+    }
+
+    try {
+      const record = await ChatMessage.findOneAndDelete({ _id: messageId, room: roomId, sender: socket.data.member.id }).lean();
+      if (!record) return respond({ ok: false, error: 'Message not found or cannot be deleted' });
+      io.to(channel).emit('chat:deleted', { id: messageId, roomId });
+      respond({ ok: true });
+    } catch {
+      respond({ ok: false, error: 'Message could not be deleted' });
+    }
+  });
 });
 
 function toPublicMessage(message) {
@@ -159,6 +209,8 @@ app.use('/api/chat',     require('./routes/chat'));
 app.use('/api/courses',  require('./routes/courses'));
 app.use('/api/ai',       require('./routes/ai'));
 app.use('/api/billing',  require('./routes/billing'));
+app.use('/api/streak',   require('./routes/streak'));
+app.use('/api/review',   require('./routes/review'));
 app.use('/api/settings', require('./routes/settings'));
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', ts: new Date() }));
@@ -173,6 +225,7 @@ const PORT = process.env.PORT || 5000;
 
 async function startServer() {
   await connectDB();
+  startStudyReminderScheduler();
   server.listen(PORT, () => console.log(`🚀 MedPrep API → http://localhost:${PORT}`));
 }
 

@@ -11,6 +11,7 @@ import Spinner from '@/components/ui/Spinner';
 import { notFound } from 'next/navigation';
 import { formatLesson } from '@/lib/lessonContent';
 import { consumeLessonStream } from '@/lib/streamLesson';
+import { recordStreakActivity } from '@/lib/streak';
 import { Pause, Play } from 'lucide-react';
 
 const NIH3D_ENTRY = 'https://3d.nih.gov/entries/3DPX-021858';
@@ -62,14 +63,21 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
         signal: controller.signal,
       });
       let full = previousContent;
-      await consumeLessonStream(res, text => {
+      const incomplete = await consumeLessonStream(res, text => {
         full += text;
         if (sequence === requestSequence.current) setContent(full);
       });
       if (!full.trim()) throw new Error('No lesson content was returned. Please try again.');
       if (sequence !== requestSequence.current) return;
+      if (incomplete) {
+        setPaused(true);
+        setLessonError('The lesson reached its response limit. Resume to continue the lesson.');
+        await refreshLessonUsage();
+        return;
+      }
       try { await api.post('/ai/save-progress', { courseId: course.id, topic, type: 'lesson' }); }
       catch { toast.error('Lesson ready, but course progress did not sync'); }
+      void recordStreakActivity().catch(() => toast.error('Lesson finished, but your streak could not be updated.'));
       await refreshLessonUsage();
     } catch (error: any) {
       if (sequence === requestSequence.current && !controller.signal.aborted) {

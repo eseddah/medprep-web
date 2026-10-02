@@ -8,6 +8,7 @@ export interface User {
   bio?: string;
   school?: string;
   year?: string;
+  timezone?: string;
   avatar?: string;
   stats?: Record<string, number>;
   preferences?: Record<string, unknown>;

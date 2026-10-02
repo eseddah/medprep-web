@@ -18,8 +18,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
 
   // Profile
-  const [profile, setProfile] = useState({ name:'', bio:'', school:'', year:'' });
-  useEffect(() => { if (user) setProfile({ name:user.name||'', bio:(user.bio||''), school:(user.school||''), year:(user.year||'') }); }, [user]);
+  const [profile, setProfile] = useState({ name:'', bio:'', school:'', year:'', timezone:'Africa/Accra' });
+  useEffect(() => { if (user) setProfile({ name:user.name||'', bio:(user.bio||''), school:(user.school||''), year:(user.year||''), timezone:user.timezone||'Africa/Accra' }); }, [user]);
 
   // Password
   const [pwd, setPwd] = useState({ currentPassword:'', newPassword:'', confirm:'' });
@@ -59,8 +59,16 @@ export default function SettingsPage() {
     try {
       const { data } = await api.patch('/users/preferences', prefs);
       updateUser({ preferences: data.preferences });
-      toast.success('Preferences saved');
-    } catch (e:any) { toast.error('Failed'); }
+      setPrefs(data.preferences);
+      const enabledNotifications = prefs.emailNotifications && !user?.preferences?.emailNotifications;
+      const enabledReminders = prefs.studyReminders && !user?.preferences?.studyReminders;
+      toast.success(enabledNotifications
+        ? enabledReminders ? 'Confirmation sent. Daily reminders start after 9 a.m. in your timezone.' : 'Email notifications enabled. Confirmation email sent.'
+        : enabledReminders ? 'Daily reminders enabled. They arrive after 9 a.m. in your timezone.' : 'Preferences saved');
+    } catch (e:any) {
+      if (user?.preferences) setPrefs(user.preferences);
+      toast.error(e.response?.data?.error || 'Preferences could not be saved');
+    }
     setLoading(false);
   };
 
@@ -124,6 +132,11 @@ export default function SettingsPage() {
                     {['Premed Year 1','Premed Year 2','Premed Year 3','Premed Year 4','Med School Year 1','Med School Year 2','Med School Year 3','Med School Year 4','Resident','Other'].map(y => <option key={y}>{y}</option>)}
                   </select>
                 </div>
+                <div>
+                  <label htmlFor="profile-timezone" className="block text-[12px] text-text3 mb-1.5">Timezone</label>
+                  <Input id="profile-timezone" value={profile.timezone} onChange={e => setProfile(p => ({...p, timezone:e.target.value}))} placeholder="Africa/Accra" />
+                  <p className="mt-1 text-[11px] text-text3">Used to determine the day for your study streak.</p>
+                </div>
                 <div className="pt-2">
                   <Button variant="primary" onClick={saveProfile} disabled={loading}>{loading ? 'Saving…' : 'Save Profile'}</Button>
                 </div>
@@ -167,15 +180,20 @@ export default function SettingsPage() {
                   </select>
                 </div>
                 {[
-                  ['emailNotifications', 'Email Notifications', 'Get study reminders and account updates by email'],
-                  ['studyReminders', 'Daily Study Reminders', 'Receive a reminder to study each day'],
+                  ['emailNotifications', 'Email Notifications', 'Required for daily reminders; sends a confirmation email when enabled'],
+                  ['studyReminders', 'Daily Study Reminders', 'Receive one reminder after 9 a.m. in your timezone'],
                 ].map(([key, label, desc]) => (
                   <div key={key} className="flex items-center justify-between py-3 border-b border-border">
                     <div>
                       <div className="text-[14px] text-text">{label}</div>
                       <div className="text-[12px] text-text3">{desc}</div>
                     </div>
-                    <button onClick={() => setPrefs((p:any) => ({...p, [key]:!p[key]}))} className={`w-11 h-6 rounded-full transition-colors relative ${prefs[key] ? 'bg-accent' : 'bg-surface3'}`}>
+                    <button type="button" role="switch" aria-label={label} aria-checked={Boolean(prefs[key])} disabled={key === 'studyReminders' && !prefs.emailNotifications} onClick={() => setPrefs((p:any) => {
+                      const enabled = !p[key];
+                      return key === 'emailNotifications' && !enabled
+                        ? { ...p, emailNotifications: false, studyReminders: false }
+                        : { ...p, [key]: enabled };
+                    })} className={`w-11 h-6 rounded-full transition-colors relative disabled:cursor-not-allowed disabled:opacity-50 ${prefs[key] ? 'bg-accent' : 'bg-surface3'}`}>
                       <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${prefs[key] ? 'left-[22px]' : 'left-0.5'}`} />
                     </button>
                   </div>

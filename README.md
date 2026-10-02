@@ -61,7 +61,7 @@ medprep-app/
 ### Prerequisites
 - Node.js 20+
 - MongoDB (local or Atlas)
-- Anthropic API key
+- Gemini API key
 - Stripe account
 - Paystack account
 
@@ -89,7 +89,8 @@ NODE_ENV=development
 MONGODB_URI=mongodb://localhost:27017/medprep
 JWT_SECRET=your_super_secret_64_char_string_here
 JWT_EXPIRES_IN=7d
-ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-3.8-flash
 
 # Stripe — get from dashboard.stripe.com
 STRIPE_SECRET_KEY=sk_test_...
@@ -102,7 +103,13 @@ PAYSTACK_SECRET_KEY=sk_test_...
 PAYSTACK_PUBLIC_KEY=pk_test_...
 
 CLIENT_URL=http://localhost:3000
+RESEND_API_KEY=re_...
+EMAIL_FROM=MedPrep <notifications@your-verified-domain.com>
 ```
+
+Email notifications are opt-in. Enabling them sends a confirmation message through Resend. Daily reminders require email notifications and are sent once per local day after 9 a.m. using the account timezone. Create an API key and verify the sender domain in Resend before setting `RESEND_API_KEY` and `EMAIL_FROM` in the backend environment. If email delivery is not configured, the preference is not saved.
+
+AI quiz, flashcard, lesson, tutor, case, and Smart Review explanations use the Gemini API. Create a key in [Google AI Studio](https://aistudio.google.com/apikey), set `GEMINI_API_KEY` and optionally `GEMINI_MODEL` in the backend environment, then restart the API. Keep the key server-side and restrict it to the Gemini API. Google states that prompts on its free tier may be used to improve its products; review the current [Gemini API terms](https://ai.google.dev/gemini-api/terms) before sending uploaded notes or other sensitive content.
 
 **frontend/.env.local**
 ```env

@@ -1,19 +1,12 @@
 const router = require('express').Router();
-const Anthropic = require('@anthropic-ai/sdk');
 const { protect, requirePro } = require('../middleware/auth');
 const User = require('../models/User');
 const Progress = require('../models/Progress');
 const COURSES = require('../lib/coursesData');
-const { markStudyDay, reserveDailyConcept, releaseDailyConcept, FREE_DAILY_CONCEPT_LIMIT } = require('../lib/studyActivity');
+const { reserveDailyConcept, releaseDailyConcept, FREE_DAILY_CONCEPT_LIMIT } = require('../lib/studyActivity');
+const { generateText, isConfigured, parseJsonText, streamText, getModel } = require('../lib/gemini');
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
-const AI_SETUP_ERROR = 'AI generation is not configured. Add a valid ANTHROPIC_API_KEY to backend/.env and restart the API.';
-
-function hasConfiguredAnthropicKey() {
-  const key = process.env.ANTHROPIC_API_KEY?.trim() || '';
-  return Boolean(key && !/your_|placeholder|\.\.\.|<.*>/i.test(key));
-}
+const AI_SETUP_ERROR = 'AI generation is not configured. Add GEMINI_API_KEY to the backend environment and restart the API.';
 
 // Question limits by plan
 const QUIZ_LIMITS = { free: 10, pro: 150, annual: 250 };
@@ -27,7 +20,7 @@ router.post('/quiz', protect, async (req, res) => {
   const requested = Math.min(parseInt(count) || 20, maxQ);
 
   if (!topic && !material) return res.status(400).json({ error: 'Topic or material required' });
-  if (!hasConfiguredAnthropicKey()) return res.status(503).json({ error: AI_SETUP_ERROR });
+  if (!isConfigured()) return res.status(503).json({ error: AI_SETUP_ERROR });
 
   const system = `You are an expert medical educator. Generate exactly ${requested} ${type || 'Multiple Choice'} quiz questions at ${difficulty || 'Medium'} difficulty.
 ${courseId ? `Course context: ${courseId}` : ''}
@@ -41,22 +34,16 @@ Make questions clinically accurate, high-yield, and exam-relevant.`;
     : `Generate questions about: ${topic}. Use standard medical curriculum content.`;
 
   try {
-    const msg = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 24000,
-      system,
-      messages: [{ role: 'user', content: userMsg }],
-    });
-    const raw = msg.content[0].text.replace(/```json|```/g, '').trim();
-    const questions = JSON.parse(raw);
+    const raw = await generateText({ system, prompt: userMsg, maxOutputTokens: 24000 });
+    const questions = parseJsonText(raw);
+    if (!Array.isArray(questions) || !questions.length) throw new Error('Gemini returned no quiz questions. Please try again.');
 
     // Track stats
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'stats.quizzesCompleted': 1 } });
-    await markStudyDay(req.user._id);
 
     res.json({ questions, count: questions.length, plan, maxAllowed: maxQ });
   } catch (e) {
-    res.status(500).json({ error: 'Failed to generate quiz: ' + e.message });
+    res.status(e.status || 500).json({ error: 'Failed to generate quiz: ' + e.message });
   }
 });
 
@@ -68,7 +55,7 @@ router.post('/flashcards', protect, async (req, res) => {
   const requested = Math.min(parseInt(count) || 20, maxF);
 
   if (!topic && !material) return res.status(400).json({ error: 'Topic or material required' });
-  if (!hasConfiguredAnthropicKey()) return res.status(503).json({ error: AI_SETUP_ERROR });
+  if (!isConfigured()) return res.status(503).json({ error: AI_SETUP_ERROR });
 
   const system = `You are a medical education expert. Create exactly ${requested} high-yield flashcards.
 Focus on key definitions, mechanisms, clinical pearls, mnemonics, and exam-relevant facts.
@@ -80,20 +67,14 @@ Return ONLY valid JSON array:
     : `Create flashcards about: ${topic}. Use standard medical/premed curriculum.`;
 
   try {
-    const msg = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 8000,
-      system,
-      messages: [{ role: 'user', content: userMsg }],
-    });
-    const raw = msg.content[0].text.replace(/```json|```/g, '').trim();
-    const cards = JSON.parse(raw);
+    const raw = await generateText({ system, prompt: userMsg, maxOutputTokens: 8000 });
+    const cards = parseJsonText(raw);
+    if (!Array.isArray(cards) || !cards.length) throw new Error('Gemini returned no flashcards. Please try again.');
 
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'stats.flashcardsStudied': cards.length } });
-    await markStudyDay(req.user._id);
     res.json({ cards, count: cards.length, plan, maxAllowed: maxF });
   } catch (e) {
-    res.status(500).json({ error: 'Failed to generate flashcards: ' + e.message });
+    res.status(e.status || 500).json({ error: 'Failed to generate flashcards: ' + e.message });
   }
 });
 
@@ -102,7 +83,7 @@ router.post('/lesson', protect, async (req, res) => {
   const { topic, courseId, material, depth } = req.body;
   const previousContent = typeof req.body.previousContent === 'string' ? req.body.previousContent.slice(-12000) : '';
   if (!topic && !material) return res.status(400).json({ error: 'Topic or material required' });
-  if (!hasConfiguredAnthropicKey()) return res.status(503).json({ error: AI_SETUP_ERROR });
+  if (!isConfigured()) return res.status(503).json({ error: AI_SETUP_ERROR });
   const quota = await reserveDailyConcept(req.user._id);
   if (!quota.allowed) {
     return res.status(429).json({
@@ -139,19 +120,15 @@ Use Markdown tables for comparisons and fenced text blocks for at least one labe
       : `Teach me about: ${topic}. Use standard medical/premed curriculum.`;
 
   try {
-    const stream = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 8000,
-      stream: true,
-      system,
-      messages: [{ role: 'user', content: userMsg }],
-    }, { signal: abortController.signal });
-
-    for await (const event of stream) {
+    let reachedTokenLimit = false;
+    for await (const text of streamText({ system, prompt: userMsg, maxOutputTokens: 8000 }, {
+      signal: abortController.signal,
+      onComplete: interaction => {
+        reachedTokenLimit = (interaction.usage?.total_output_tokens || 0) >= 7900;
+      },
+    })) {
       if (abortController.signal.aborted) break;
-      if (event.type === 'content_block_delta' && event.delta?.text) {
-        res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
-      }
+      res.write(`data: ${JSON.stringify({ text })}\n\n`);
     }
 
     if (abortController.signal.aborted) {
@@ -160,7 +137,9 @@ Use Markdown tables for comparisons and fenced text blocks for at least one labe
     }
 
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'stats.lessonsGenerated': 1 } });
-    await markStudyDay(req.user._id);
+    if (reachedTokenLimit) {
+      res.write(`data: ${JSON.stringify({ incomplete: true })}\n\n`);
+    }
     res.write(`data: [DONE]\n\n`);
     res.end();
   } catch (e) {
@@ -186,17 +165,17 @@ router.post('/tutor', protect, requirePro, async (req, res) => {
   if (!messages.length || messages[messages.length - 1].role !== 'user') {
     return res.status(400).json({ error: 'Send a question to start a tutoring turn' });
   }
-  if (!hasConfiguredAnthropicKey()) return res.status(503).json({ error: AI_SETUP_ERROR });
+  if (!isConfigured()) return res.status(503).json({ error: AI_SETUP_ERROR });
   const context = typeof req.body.context === 'string' ? req.body.context.trim().slice(0, 180) : '';
 
   try {
-    const response = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 3000,
+    const prompt = messages.map(message => `${message.role === 'assistant' ? 'MedPrep Tutor' : 'Student'}: ${message.content}`).join('\n\n');
+    const message = await generateText({
+      maxOutputTokens: 3000,
       system: `You are MedPrep Tutor, a patient Socratic tutor for medical, premed, and mathematics learners. ${context ? `Current course context: ${context}.` : ''} Answer accurately and clearly, first diagnose the learner’s confusion, then explain concepts in ordered steps with a small worked example or a fenced text diagram/table when useful. Ask one focused follow-up question at the end. When a learner provides course notes, ground the explanation in those notes. Do not claim that your answer is externally source-verified and never invent citations or URLs. For clinical topics, use educational framing and do not diagnose real people.`,
-      messages,
+      prompt,
     });
-    res.json({ message: response.content.filter(block => block.type === 'text').map(block => block.text).join('\n') });
+    res.json({ message });
   } catch (error) {
     res.status(502).json({ error: 'The tutor is temporarily unavailable. Please try again.' });
   }
@@ -210,21 +189,18 @@ router.post('/case', protect, async (req, res) => {
   if (!track || !course || course.cat !== track || !topic) {
     return res.status(400).json({ error: 'Choose a course and topic in the selected study track' });
   }
-  if (!hasConfiguredAnthropicKey()) return res.status(503).json({ error: AI_SETUP_ERROR });
+  if (!isConfigured()) return res.status(503).json({ error: AI_SETUP_ERROR });
 
   try {
-    const response = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 5000,
+    const raw = await generateText({
+      maxOutputTokens: 5000,
       system: `Create a synthetic educational ${track.toLowerCase()} case round for a student studying ${course.title}, focused on ${topic}. This is coursework, not guidance for a real patient. Use a short, plausible vignette and 3 progressive decision steps. For premed courses, use a clinical or laboratory context to teach foundational biology, chemistry, physics, psychology, or mathematics. Make explanations rigorous, teach the underlying concepts, and do not invent citations. Return only valid JSON with this shape: {"title":"...","caseStem":"...","learningObjectives":["..."],"illustration":"A concise plain-text concept flow using arrows","steps":[{"prompt":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"..."}],"debrief":"..."}. Include exactly 3 steps, each with 4 options and detailed rationales.`,
-      messages: [{ role: 'user', content: `Track: ${track}\nCourse: ${course.title}\nTopic: ${topic}\nCreate the case now.` }],
+      prompt: `Track: ${track}\nCourse: ${course.title}\nTopic: ${topic}\nCreate the case now.`,
     });
-    const raw = response.content.filter(block => block.type === 'text').map(block => block.text).join('').replace(/```(?:json)?|```/g, '').trim();
-    const caseStudy = JSON.parse(raw);
+    const caseStudy = parseJsonText(raw);
     if (!Array.isArray(caseStudy.steps) || caseStudy.steps.length !== 3 || caseStudy.steps.some(step => !Array.isArray(step.options) || step.options.length !== 4 || !Number.isInteger(step.correctIndex) || !step.explanation)) {
       return res.status(502).json({ error: 'The case did not meet the expected format. Please generate another.' });
     }
-    await markStudyDay(req.user._id);
     res.json({ caseStudy, course: course.title, topic, track: track.toLowerCase() });
   } catch {
     res.status(502).json({ error: 'Could not generate this case. Please try again.' });
@@ -235,7 +211,6 @@ router.post('/case', protect, async (req, res) => {
 router.post('/save-progress', protect, async (req, res) => {
   const { courseId, topic, type, score, total } = req.body;
   await Progress.create({ user: req.user._id, courseId, topic, type, score, total, completed: true });
-  await markStudyDay(req.user._id);
   res.json({ saved: true });
 });
 

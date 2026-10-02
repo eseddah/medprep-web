@@ -1,24 +1,18 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import { useStore } from '@/lib/store';
 import { COURSES, courseImageUrl } from '@/lib/courses';
-import api from '@/lib/api';
-import { Flame } from 'lucide-react';
+import ReviewDashboard from '@/components/review/ReviewDashboard';
 
 export default function CoursesPage() {
   const user = useStore(s => s.user);
   const isPro = ['pro','annual'].includes(user?.plan||'');
   const [filter, setFilter] = useState<'All'|'Medical'|'Premed'>('All');
-  const [streak, setStreak] = useState(user?.stats?.streak || 0);
   const filtered = filter === 'All' ? COURSES : COURSES.filter(c => c.cat === filter);
-
-  useEffect(() => {
-    api.get('/users/stats').then(({ data }) => setStreak(data.stats?.streak || 0)).catch(() => {});
-  }, []);
 
   return (
     <DashboardLayout title="Courses" sub="Structured study paths across medicine, science, and mathematics">
@@ -36,10 +30,8 @@ export default function CoursesPage() {
           <Button key={f} size="sm" variant={filter===f?'primary':'ghost'} onClick={()=>setFilter(f)}>{f}</Button>
         ))}
         <span className="ml-auto self-center text-[13px] text-text3">{filtered.length} courses</span>
-        <span className="inline-flex items-center gap-1.5 self-center rounded-lg border border-amber/35 bg-amber/10 px-3 py-1.5 text-[12px] font-semibold text-amber" title="Consecutive UTC study days">
-          <Flame size={15} aria-hidden="true" /> {streak} day{streak === 1 ? '' : 's'}
-        </span>
       </div>
+      <ReviewDashboard />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filtered.map(course => {
           const locked = !course.free && !isPro;

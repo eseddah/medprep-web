@@ -1,6 +1,7 @@
 'use client';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Card from '@/components/ui/Card';
+import DeveloperProfile from '@/components/about/DeveloperProfile';
 import Link from 'next/link';
 
 const FEATURES = [
@@ -59,15 +60,7 @@ export default function AboutPage() {
         ))}
       </div>
 
-      <section className="flex items-center gap-4 md:gap-6 border-y border-border py-6 md:py-8 mb-8">
-        <div className="w-14 h-14 md:w-16 md:h-16 rounded-full shrink-0 flex items-center justify-center text-white font-dm-serif text-[24px]" style={{background:'var(--accent)'}}>E</div>
-        <div>
-          <p className="text-[11px] uppercase tracking-wide text-text3 mb-1">Developer</p>
-          <h3 className="font-dm-serif text-[21px] text-text">EDMOND</h3>
-          <p className="text-[13px] text-text2">BIOCHEMISTRY STUDENT · KNUST</p>
-          <p className="text-[12px] text-text3 mt-1">Email: edmondeddah999gmail.com</p>
-        </div>
-      </section>
+      <DeveloperProfile />
 
       {/* How it works */}
       <Card className="mb-8">

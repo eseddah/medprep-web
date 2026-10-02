@@ -2,7 +2,7 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
-import { Copy, LockKeyhole, MessageCircle, Plus, Send, Users, X } from 'lucide-react';
+import { Check, Copy, LockKeyhole, MessageCircle, Pencil, Plus, Send, Trash2, Users, X } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useStore } from '@/lib/store';
 import api from '@/lib/api';
@@ -49,6 +49,9 @@ export default function ChatPage() {
   const [connection, setConnection] = useState<Connection>('connecting');
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [sending, setSending] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState('');
+  const [editedText, setEditedText] = useState('');
+  const [messageActionId, setMessageActionId] = useState('');
   const [error, setError] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
@@ -100,6 +103,16 @@ export default function ChatPage() {
       if (message.roomId !== activeRoomRef.current) return;
       setMessages(previous => previous.some(item => item.id === message.id) ? previous : [...previous, message]);
     });
+    socket.on('chat:updated', (message: ChatMessage) => {
+      if (message.roomId === activeRoomRef.current) {
+        setMessages(previous => previous.map(item => item.id === message.id ? message : item));
+      }
+    });
+    socket.on('chat:deleted', (event: { id: string; roomId: string }) => {
+      if (event.roomId === activeRoomRef.current) {
+        setMessages(previous => previous.filter(item => item.id !== event.id));
+      }
+    });
     socket.on('chat:members', (update: { roomId: string; memberCount: number }) => {
       setRooms(previous => previous.map(room => room.id === update.roomId ? { ...room, memberCount: update.memberCount } : room));
     });
@@ -140,6 +153,38 @@ export default function ChatPage() {
     });
   };
 
+  const saveMessageEdit = (event: FormEvent) => {
+    event.preventDefault();
+    const text = editedText.trim();
+    const socket = socketRef.current;
+    if (!text || !socket?.connected || !editingMessageId || messageActionId) return;
+
+    setMessageActionId(editingMessageId);
+    socket.timeout(8000).emit('chat:edit', { roomId: activeRoomId, messageId: editingMessageId, text }, (timeoutError: Error | null, result: { ok: boolean; error?: string }) => {
+      setMessageActionId('');
+      if (timeoutError) toast.error('Message was not updated. Check your connection and try again.');
+      else if (!result.ok) toast.error(result.error || 'Message could not be updated');
+      else {
+        setEditingMessageId('');
+        toast.success('Message updated');
+      }
+    });
+  };
+
+  const deleteMessage = (message: ChatMessage) => {
+    if (!window.confirm('Delete this message?')) return;
+    const socket = socketRef.current;
+    if (!socket?.connected || messageActionId) return;
+
+    setMessageActionId(message.id);
+    socket.timeout(8000).emit('chat:delete', { roomId: activeRoomId, messageId: message.id }, (timeoutError: Error | null, result: { ok: boolean; error?: string }) => {
+      setMessageActionId('');
+      if (timeoutError) toast.error('Message was not deleted. Check your connection and try again.');
+      else if (!result.ok) toast.error(result.error || 'Message could not be deleted');
+      else toast.success('Message deleted');
+    });
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -152,6 +197,7 @@ export default function ChatPage() {
     socketRef.current?.emit('chat:leave', { roomId: activeRoomRef.current });
     activeRoomRef.current = roomId;
     setActiveRoomId(roomId);
+    setEditingMessageId('');
     setMessages([]);
     setHistoryLoaded(false);
     setError('');
@@ -298,10 +344,25 @@ export default function ChatPage() {
                 <article key={message.id} className={`flex ${ownMessage ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[88%] md:max-w-[76%] min-w-[112px] rounded-xl px-3.5 py-2.5 shadow-sm ${ownMessage ? 'bg-accent text-white rounded-br-sm' : 'bg-surface border border-border2 text-text rounded-bl-sm'}`}>
                     {!ownMessage && <p className="text-[11px] font-semibold text-accent mb-1">{message.sender.name}</p>}
-                    <p className="text-[13px] leading-relaxed whitespace-pre-wrap break-words">{message.text}</p>
+                    {editingMessageId === message.id ? (
+                      <form onSubmit={saveMessageEdit} className="space-y-2">
+                        <label className="sr-only" htmlFor={`edit-message-${message.id}`}>Edit message</label>
+                        <textarea id={`edit-message-${message.id}`} value={editedText} onChange={event => setEditedText(event.target.value)} maxLength={2000} rows={3} className="w-full min-w-[200px] resize-y rounded-md border border-border2 bg-surface px-2.5 py-2 text-[13px] leading-relaxed text-text" autoFocus />
+                        <div className="flex justify-end gap-1.5">
+                          <button type="button" onClick={() => setEditingMessageId('')} aria-label="Cancel editing" title="Cancel editing" className="rounded-md p-1.5 text-text2 hover:bg-surface2"><X size={15} /></button>
+                          <button type="submit" disabled={!editedText.trim() || messageActionId === message.id} aria-label="Save edited message" title="Save edited message" className="rounded-md p-1.5 text-accent hover:bg-surface2 disabled:opacity-50"><Check size={15} /></button>
+                        </div>
+                      </form>
+                    ) : <p className="text-[13px] leading-relaxed whitespace-pre-wrap break-words">{message.text}</p>}
                     <time dateTime={message.createdAt} className={`block text-right text-[10px] mt-1 ${ownMessage ? 'text-white/75' : 'text-text3'}`}>
                       {new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(message.createdAt))}
                     </time>
+                    {ownMessage && editingMessageId !== message.id && (
+                      <div className="mt-1 flex justify-end gap-1">
+                        <button type="button" onClick={() => { setEditingMessageId(message.id); setEditedText(message.text); }} aria-label="Edit message" title="Edit message" disabled={Boolean(messageActionId)} className="rounded p-1 text-white/80 hover:bg-white/15 disabled:opacity-50"><Pencil size={13} aria-hidden="true" /></button>
+                        <button type="button" onClick={() => deleteMessage(message)} aria-label="Delete message" title="Delete message" disabled={Boolean(messageActionId)} className="rounded p-1 text-white/80 hover:bg-white/15 disabled:opacity-50"><Trash2 size={13} aria-hidden="true" /></button>
+                      </div>
+                    )}
                   </div>
                 </article>
               );

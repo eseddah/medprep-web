@@ -11,13 +11,21 @@ const userSchema = new mongoose.Schema({
   bio:       { type: String, default: '' },
   school:    { type: String, default: '' },
   year:      { type: String, default: '' },
+  timezone:  { type: String, default: 'Africa/Accra' },
+  currentStreak:   { type: Number, default: 0 },
+  longestStreak:   { type: Number, default: 0 },
+  lastActivityDate: { type: String, default: '' },
+  activityDates:   { type: [String], default: [] },
+  studyReminderSentDate: { type: String, default: '' },
+  studyReminderLockUntil: { type: Date, default: null },
+  studyReminderLockToken: { type: String, default: '' },
   // Billing
   paystackCustomerId:   String,
   planExpiresAt:        Date,
   // Preferences
   preferences: {
     theme:           { type: String, default: 'dark' },
-    emailNotifications: { type: Boolean, default: true },
+    emailNotifications: { type: Boolean, default: false },
     studyReminders:     { type: Boolean, default: false },
     defaultQuizCount:   { type: Number, default: 20 },
     defaultFlashCount:  { type: Number, default: 20 },
@@ -30,8 +38,6 @@ const userSchema = new mongoose.Schema({
     dailyConceptsUsed:  { type: Number, default: 0 },
     dailyConceptsDate:  { type: String, default: '' },
     totalScore:         { type: Number, default: 0 },
-    streak:             { type: Number, default: 0 },
-    lastStudied:        Date,
   },
   isDeleted: { type: Boolean, default: false },
 }, { timestamps: true });
@@ -49,6 +55,9 @@ userSchema.methods.matchPassword = function(pw) {
 userSchema.methods.toPublic = function() {
   const o = this.toObject();
   delete o.password;
+  delete o.studyReminderSentDate;
+  delete o.studyReminderLockUntil;
+  delete o.studyReminderLockToken;
   return o;
 };
 

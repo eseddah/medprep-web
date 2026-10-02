@@ -1,15 +1,17 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { useStore } from '@/lib/store';
 import { COURSES, QUIZ_LIMITS } from '@/lib/courses';
 import api from '@/lib/api';
+import { recordStreakActivity } from '@/lib/streak';
+import { getStudyTopicContext } from '@/lib/studyTopics';
 import toast from 'react-hot-toast';
 import Spinner from '@/components/ui/Spinner';
 
-interface Question { question:string; options:string[]; correct:number; explanation:string; }
+interface Question { question:string; options:string[]; correct:number; explanation:string; topic?:string; }
 type Phase = 'setup'|'questions'|'results';
 
 export default function QuizPage() {
@@ -27,6 +29,11 @@ export default function QuizPage() {
   const [type, setType] = useState('Multiple Choice');
   const [topic, setTopic] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const initialTopic = new URLSearchParams(window.location.search).get('topic');
+    if (initialTopic) setTopic(initialTopic);
+  }, []);
 
   const addFiles = (list: FileList) => {
     const arr = Array.from(list);
@@ -52,12 +59,28 @@ export default function QuizPage() {
   const answer = (qi: number, oi: number) => {
     if (answered[qi] !== undefined) return;
     setAnswered(a => ({...a, [qi]:oi}));
-    if (oi === questions[qi].correct) setScore(s => s+1);
+    const question = questions[qi];
+    const isCorrect = oi === question.correct;
+    if (isCorrect) setScore(s => s+1);
+    const context = getStudyTopicContext(topic, COURSES);
+    void api.post('/review/attempt', {
+      courseId: context.courseId,
+      topic: question.topic || context.topic,
+      prompt: question.question,
+      options: question.options,
+      correctIndex: question.correct,
+      explanation: question.explanation,
+      isCorrect,
+    }).catch(() => toast.error('Your answer was recorded, but review data could not sync.'));
   };
 
   const answeredCount = Object.keys(answered).length;
   const total = questions.length;
   const pct = total ? Math.round(score/total*100) : 0;
+  const completeQuiz = () => {
+    setPhase('results');
+    void recordStreakActivity().catch(() => toast.error('Quiz complete, but your streak could not be updated.'));
+  };
 
   return (
     <DashboardLayout title="Quiz Generator" sub={`Generate up to ${maxQ} clinically accurate questions per session`}>
@@ -131,7 +154,7 @@ export default function QuizPage() {
           <div className="h-1 bg-border rounded-full mb-4 overflow-hidden"><div className="h-full bg-accent rounded-full transition-all" style={{width:`${Math.round(answeredCount/total*100)}%`}} /></div>
           <div className="flex justify-between items-center mb-5">
             <span className="text-[13px] text-text3">{answeredCount} / {total} answered</span>
-            {answeredCount === total && <Button variant="primary" size="sm" onClick={()=>setPhase('results')}>See Results →</Button>}
+            {answeredCount === total && <Button variant="primary" size="sm" onClick={completeQuiz}>See Results →</Button>}
           </div>
           {questions.map((q,qi) => {
             const ans = answered[qi];

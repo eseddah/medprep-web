@@ -1,4 +1,4 @@
-export async function consumeLessonStream(response: Response, onText: (text: string) => void) {
+export async function consumeLessonStream(response: Response, onText: (text: string) => void): Promise<boolean> {
   if (!response.ok) {
     let message = 'Lesson request failed';
     try {
@@ -13,6 +13,7 @@ export async function consumeLessonStream(response: Response, onText: (text: str
   const decoder = new TextDecoder();
   let buffer = '';
   let finished = false;
+  let incomplete = false;
 
   const consumeEvent = (eventBlock: string) => {
     const data = eventBlock.split(/\r?\n/)
@@ -25,11 +26,12 @@ export async function consumeLessonStream(response: Response, onText: (text: str
       return;
     }
 
-    let payload: { text?: string; error?: string };
+    let payload: { text?: string; error?: string; incomplete?: boolean };
     try { payload = JSON.parse(data); }
     catch { throw new Error('The lesson stream was incomplete. Please retry.'); }
     if (payload.error) throw new Error(payload.error);
     if (payload.text) onText(payload.text);
+    if (payload.incomplete) incomplete = true;
   };
 
   try {
@@ -53,4 +55,5 @@ export async function consumeLessonStream(response: Response, onText: (text: str
   } finally {
     reader.releaseLock();
   }
+  return incomplete;
 }

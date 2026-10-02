@@ -14,13 +14,27 @@ router.post('/paystack/initialize', protect, async (req, res) => {
   const plan = PLANS[planType];
   if (!plan) return res.status(400).json({ error: 'Choose a valid Pro plan' });
 
+  const secretMode = process.env.PAYSTACK_SECRET_KEY?.match(/^sk_(live|test)_/)?.[1];
+  const publicMode = process.env.PAYSTACK_PUBLIC_KEY?.match(/^pk_(live|test)_/)?.[1];
+  if (!secretMode || !publicMode || secretMode !== publicMode) {
+    return res.status(503).json({ error: 'Paystack is not configured with matching test or live keys.' });
+  }
+
+  let clientUrl;
+  try { clientUrl = new URL(process.env.CLIENT_URL); } catch {
+    return res.status(503).json({ error: 'Set CLIENT_URL to the website address used for Paystack payment returns.' });
+  }
+  if (process.env.NODE_ENV === 'production' && ['localhost', '127.0.0.1'].includes(clientUrl.hostname)) {
+    return res.status(503).json({ error: 'Set CLIENT_URL to the deployed website address before accepting live payments.' });
+  }
+
   const { data } = await axios.post(
     'https://api.paystack.co/transaction/initialize',
     {
       email: req.user.email,
       amount: plan.amount,
       currency: 'GHS',
-      callback_url: `${process.env.CLIENT_URL}/billing?ps_success=true`,
+      callback_url: `${clientUrl.origin}/billing?ps_success=true`,
       metadata: { userId: req.user._id.toString(), planType, userName: req.user.name },
       channels: ['card', 'mobile_money', 'bank'],
     },
