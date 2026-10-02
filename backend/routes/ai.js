@@ -4,7 +4,7 @@ const User = require('../models/User');
 const Progress = require('../models/Progress');
 const COURSES = require('../lib/coursesData');
 const { reserveDailyConcept, releaseDailyConcept, FREE_DAILY_CONCEPT_LIMIT } = require('../lib/studyActivity');
-const { generateText, isConfigured, parseJsonText, streamText, getModel } = require('../lib/gemini');
+const { callAI, callAIStream, isConfigured, parseJsonText } = require('../lib/gemini');
 
 const AI_SETUP_ERROR = 'AI generation is not configured. Add GEMINI_API_KEY to the backend environment and restart the API.';
 
@@ -34,7 +34,7 @@ Make questions clinically accurate, high-yield, and exam-relevant.`;
     : `Generate questions about: ${topic}. Use standard medical curriculum content.`;
 
   try {
-    const raw = await generateText({ system, prompt: userMsg, maxOutputTokens: 24000 });
+    const raw = await callAI({ system, prompt: userMsg, maxOutputTokens: 24000 });
     const questions = parseJsonText(raw);
     if (!Array.isArray(questions) || !questions.length) throw new Error('Gemini returned no quiz questions. Please try again.');
 
@@ -67,7 +67,7 @@ Return ONLY valid JSON array:
     : `Create flashcards about: ${topic}. Use standard medical/premed curriculum.`;
 
   try {
-    const raw = await generateText({ system, prompt: userMsg, maxOutputTokens: 8000 });
+    const raw = await callAI({ system, prompt: userMsg, maxOutputTokens: 8000 });
     const cards = parseJsonText(raw);
     if (!Array.isArray(cards) || !cards.length) throw new Error('Gemini returned no flashcards. Please try again.');
 
@@ -121,7 +121,7 @@ Use Markdown tables for comparisons and fenced text blocks for at least one labe
 
   try {
     let reachedTokenLimit = false;
-    for await (const text of streamText({ system, prompt: userMsg, maxOutputTokens: 8000 }, {
+    for await (const text of callAIStream({ system, prompt: userMsg, maxOutputTokens: 8000 }, {
       signal: abortController.signal,
       onComplete: interaction => {
         reachedTokenLimit = (interaction.usage?.total_output_tokens || 0) >= 7900;
@@ -170,7 +170,7 @@ router.post('/tutor', protect, requirePro, async (req, res) => {
 
   try {
     const prompt = messages.map(message => `${message.role === 'assistant' ? 'MedPrep Tutor' : 'Student'}: ${message.content}`).join('\n\n');
-    const message = await generateText({
+    const message = await callAI({
       maxOutputTokens: 3000,
       system: `You are MedPrep Tutor, a patient Socratic tutor for medical, premed, and mathematics learners. ${context ? `Current course context: ${context}.` : ''} Answer accurately and clearly, first diagnose the learner’s confusion, then explain concepts in ordered steps with a small worked example or a fenced text diagram/table when useful. Ask one focused follow-up question at the end. When a learner provides course notes, ground the explanation in those notes. Do not claim that your answer is externally source-verified and never invent citations or URLs. For clinical topics, use educational framing and do not diagnose real people.`,
       prompt,
@@ -192,7 +192,7 @@ router.post('/case', protect, async (req, res) => {
   if (!isConfigured()) return res.status(503).json({ error: AI_SETUP_ERROR });
 
   try {
-    const raw = await generateText({
+    const raw = await callAI({
       maxOutputTokens: 5000,
       system: `Create a synthetic educational ${track.toLowerCase()} case round for a student studying ${course.title}, focused on ${topic}. This is coursework, not guidance for a real patient. Use a short, plausible vignette and 3 progressive decision steps. For premed courses, use a clinical or laboratory context to teach foundational biology, chemistry, physics, psychology, or mathematics. Make explanations rigorous, teach the underlying concepts, and do not invent citations. Return only valid JSON with this shape: {"title":"...","caseStem":"...","learningObjectives":["..."],"illustration":"A concise plain-text concept flow using arrows","steps":[{"prompt":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"..."}],"debrief":"..."}. Include exactly 3 steps, each with 4 options and detailed rationales.`,
       prompt: `Track: ${track}\nCourse: ${course.title}\nTopic: ${topic}\nCreate the case now.`,

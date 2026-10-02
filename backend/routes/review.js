@@ -5,7 +5,7 @@ const ReviewItem = require('../models/ReviewItem');
 const TopicMastery = require('../models/TopicMastery');
 const COURSES = require('../lib/coursesData');
 const { recordTopicAttempt, summarizeMastery } = require('../lib/reviewStudy');
-const { generateText, isConfigured } = require('../lib/gemini');
+const { callAI, isConfigured } = require('../lib/gemini');
 
 const ratings = new Set(['again', 'hard', 'good', 'easy']);
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -167,7 +167,7 @@ router.post('/:id/explain', protect, async (req, res) => {
   const item = await ReviewItem.findOne({ _id: req.params.id, user: req.user._id }).lean();
   if (!item || item.type !== 'question') return res.status(404).json({ error: 'Question not found' });
   try {
-    const explanation = await generateText({
+    const explanation = await callAI({
       maxOutputTokens: 700,
       system: 'Explain medical and premedical learning questions clearly and concisely. Correct misconceptions and do not invent references. This is educational content, not personal medical advice.',
       prompt: `Topic: ${item.topic}\nQuestion: ${item.prompt}\nOptions: ${item.options.map((option, index) => `${index + 1}. ${option}`).join('\n')}\nCorrect answer: ${item.options[item.correctIndex] || item.answer}\nStored explanation: ${item.explanation || 'None'}`,

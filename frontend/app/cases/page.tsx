@@ -6,6 +6,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import { COURSES, Course } from '@/lib/courses';
+import { formatLesson } from '@/lib/lessonContent';
 import api from '@/lib/api';
 import { recordStreakActivity } from '@/lib/streak';
 import toast from 'react-hot-toast';
@@ -124,7 +125,7 @@ export default function CasesPage() {
             <Button variant="ghost" size="sm" onClick={generate} disabled={loading}><RotateCcw size={15} /> New case</Button>
           </div>
           <Card>
-            <p className="text-[14px] leading-relaxed text-text2">{caseStudy.caseStem}</p>
+            <div className="text-[14px] leading-relaxed text-text2">{formatLesson(caseStudy.caseStem)}</div>
             {caseStudy.learningObjectives?.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{caseStudy.learningObjectives.map(objective => <span key={objective} className="rounded-md border border-border bg-surface2 px-2.5 py-1 text-[11px] text-text2">{objective}</span>)}</div>}
           </Card>
           <Card>
@@ -135,12 +136,12 @@ export default function CasesPage() {
             {!step ? (
               <div>
                 <h3 className="font-semibold text-text mb-2">Case debrief</h3>
-                <p className="text-[13px] leading-relaxed text-text2 whitespace-pre-wrap">{caseStudy.debrief}</p>
+                <div className="space-y-2 text-[13px] leading-relaxed text-text2">{formatLesson(caseStudy.debrief)}</div>
                 <Button variant="primary" size="sm" className="mt-5" onClick={generate}>Try another case</Button>
               </div>
             ) : (
               <>
-                <p className="text-[14px] leading-relaxed text-text mb-4">{step.prompt}</p>
+                <div className="mb-4 text-[14px] leading-relaxed text-text">{formatLesson(step.prompt)}</div>
                 <div className="space-y-2">
                   {step.options.map((option, index) => {
                     const correct = revealed && index === step.correctIndex;
@@ -150,7 +151,7 @@ export default function CasesPage() {
                     </button>;
                   })}
                 </div>
-                {revealed && <p className="mt-4 rounded-lg border-l-[3px] border-accent bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-text2">{step.explanation}</p>}
+                {revealed && <div className="mt-4 rounded-lg border-l-[3px] border-accent bg-surface2 px-4 py-3 text-[13px] leading-relaxed text-text2">{formatLesson(step.explanation)}</div>}
                 <div className="mt-4 flex justify-end">
                   {!revealed
                     ? <Button variant="primary" size="sm" onClick={checkAnswer} disabled={choice === null}>Check answer</Button>

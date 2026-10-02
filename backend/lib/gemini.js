@@ -1,5 +1,12 @@
+const { Anthropic } = require('@anthropic-ai/sdk');
+
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
-const DEFAULT_MODEL = 'gemini-3.8-flash';
+const AI_MODELS = {
+  primary: 'gemini-2.5-flash',
+  fallback: 'gemini-2.0-flash',
+  anthropic: 'claude-sonnet-4-20250514',
+};
+const DEFAULT_MODEL = AI_MODELS.primary;
 
 function isConfigured() {
   const key = process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '';
@@ -14,20 +21,53 @@ function getModel() {
   return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
 }
 
+function getGeminiModels() {
+  const envModel = process.env.GEMINI_MODEL?.trim();
+  const models = [];
+  if (envModel) models.push(envModel);
+  models.push(AI_MODELS.primary, AI_MODELS.fallback);
+  return Array.from(new Set(models.filter(Boolean)));
+}
+
+function shouldRetryAiError(error) {
+  const text = `${error?.code || ''} ${error?.message || ''}`.toLowerCase();
+  return /(429|503|overloaded|high demand|resource exhausted|rate limit|temporarily unavailable|too many requests)/i.test(text);
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function responseText(interaction) {
-  interaction = interaction.interaction || interaction;
-  if (typeof interaction.output_text === 'string') return interaction.output_text;
-  return (interaction.steps || [])
-    .filter(step => step.type === 'model_output')
+  const payload = interaction?.interaction || interaction || {};
+
+  if (typeof payload.output_text === 'string' && payload.output_text.trim()) {
+    return payload.output_text.trim();
+  }
+
+  const result = [];
+  const candidates = payload.candidates || [];
+  for (const candidate of candidates) {
+    const parts = candidate?.content?.parts || candidate?.parts || [];
+    for (const part of parts) {
+      if (typeof part?.text === 'string' && part.text.trim()) {
+        result.push(part.text.trim());
+      }
+    }
+  }
+  if (result.length) return result.join('\n');
+
+  return (payload.steps || [])
+    .filter(step => step?.type === 'model_output')
     .flatMap(step => step.content || [])
-    .filter(part => part.type === 'text' && typeof part.text === 'string')
-    .map(part => part.text)
+    .filter(part => part?.type === 'text' && typeof part.text === 'string' && part.text.trim())
+    .map(part => part.text.trim())
     .join('\n');
 }
 
-function requestBody({ system, prompt, maxOutputTokens, stream }) {
+function requestBody({ system, prompt, maxOutputTokens, stream, model }) {
   return {
-    model: getModel(),
+    model: model || getModel(),
     input: prompt,
     system_instruction: system,
     store: false,
@@ -36,7 +76,7 @@ function requestBody({ system, prompt, maxOutputTokens, stream }) {
   };
 }
 
-async function requestGemini(options, { stream = false, signal } = {}) {
+async function requestGemini(options, { stream = false, signal, model } = {}) {
   if (!isConfigured()) {
     const error = new Error('Gemini is not configured. Add GEMINI_API_KEY to the backend environment and restart the API.');
     error.code = 'GEMINI_NOT_CONFIGURED';
@@ -51,7 +91,7 @@ async function requestGemini(options, { stream = false, signal } = {}) {
         'Content-Type': 'application/json',
         'x-goog-api-key': getApiKey(),
       },
-      body: JSON.stringify(requestBody({ ...options, stream })),
+      body: JSON.stringify(requestBody({ ...options, stream, model })),
       signal: signal || AbortSignal.timeout(120000),
     });
   } catch (error) {
@@ -72,12 +112,104 @@ async function requestGemini(options, { stream = false, signal } = {}) {
   return response;
 }
 
-async function generateText(options) {
-  const response = await requestGemini(options);
+async function generateText(options = {}) {
+  const response = await requestGemini(options, { model: options.model || getModel() });
   const interaction = await response.json();
   const text = responseText(interaction);
-  if (!text) throw new Error('Gemini returned no text. Please try again.');
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new Error('Gemini returned an empty response. Please try again.');
+  }
   return text;
+}
+
+async function generateAnthropicText(options = {}) {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('Anthropic is not configured.');
+  }
+
+  const anthropic = new Anthropic({ apiKey });
+  const response = await anthropic.messages.create({
+    model: AI_MODELS.anthropic,
+    max_tokens: options.maxOutputTokens || 4000,
+    system: options.system || 'You are a careful medical educator.',
+    messages: [{ role: 'user', content: options.prompt || '' }],
+  });
+
+  const text = (response.content || [])
+    .filter(part => part.type === 'text')
+    .map(part => part.text)
+    .join('\n')
+    .trim();
+
+  if (!text) {
+    throw new Error('Anthropic returned an empty response.');
+  }
+
+  return text;
+}
+
+async function callAI(options = {}) {
+  const models = getGeminiModels();
+  let lastError;
+
+  for (const model of models) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await generateText({ ...options, model });
+      } catch (error) {
+        lastError = error;
+        if (!shouldRetryAiError(error) || attempt === 2) break;
+        await sleep(500 * (attempt + 1));
+      }
+    }
+  }
+
+  if (process.env.ANTHROPIC_API_KEY?.trim()) {
+    try {
+      return await generateAnthropicText(options);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const fallbackError = new Error('AI generation is temporarily unavailable. Please try again in a moment.');
+  fallbackError.cause = lastError;
+  throw fallbackError;
+}
+
+async function* callAIStream(options = {}, { signal, onComplete } = {}) {
+  const models = getGeminiModels();
+  let lastError;
+
+  for (const model of models) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        for await (const chunk of streamText({ ...options, model }, { signal, onComplete })) {
+          yield chunk;
+        }
+        return;
+      } catch (error) {
+        lastError = error;
+        if (!shouldRetryAiError(error) || attempt === 2) break;
+        await sleep(500 * (attempt + 1));
+      }
+    }
+  }
+
+  if (process.env.ANTHROPIC_API_KEY?.trim()) {
+    try {
+      const text = await generateAnthropicText(options);
+      yield text;
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  const fallbackError = new Error('AI generation is temporarily unavailable. Please try again in a moment.');
+  fallbackError.cause = lastError;
+  throw fallbackError;
 }
 
 async function* streamText(options, { signal, onComplete } = {}) {
@@ -126,14 +258,41 @@ async function* streamText(options, { signal, onComplete } = {}) {
 }
 
 function parseJsonText(text) {
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new Error('Gemini returned an empty response. Please try again.');
+  }
+
   const unfenced = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  if (!unfenced) {
+    throw new Error('Gemini returned an empty JSON response. Please try again.');
+  }
+
   const start = Math.min(...['[', '{'].map(character => {
     const index = unfenced.indexOf(character);
     return index < 0 ? Number.POSITIVE_INFINITY : index;
   }));
   const end = Math.max(unfenced.lastIndexOf(']'), unfenced.lastIndexOf('}'));
-  if (!Number.isFinite(start) || end < start) throw new Error('Gemini returned invalid JSON. Please try again.');
-  return JSON.parse(unfenced.slice(start, end + 1));
+  if (!Number.isFinite(start) || end < start) {
+    throw new Error('Gemini returned invalid JSON. Please try again.');
+  }
+
+  try {
+    return JSON.parse(unfenced.slice(start, end + 1));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'JSON parse failed';
+    throw new Error(`Gemini returned invalid JSON: ${message}. Please try again.`);
+  }
 }
 
-module.exports = { DEFAULT_MODEL, generateText, getModel, isConfigured, parseJsonText, streamText };
+module.exports = {
+  AI_MODELS,
+  DEFAULT_MODEL,
+  callAI,
+  callAIStream,
+  generateAnthropicText,
+  generateText,
+  getModel,
+  isConfigured,
+  parseJsonText,
+  streamText,
+};
