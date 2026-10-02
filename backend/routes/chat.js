@@ -2,6 +2,8 @@ const router = require('express').Router();
 const crypto = require('crypto');
 const { protect } = require('../middleware/auth');
 const ChatRoom = require('../models/ChatRoom');
+const User = require('../models/User');
+const StudyPointEvent = require('../models/StudyPointEvent');
 
 const PUBLIC_LOUNGE = {
   id: 'study-lounge',
@@ -26,6 +28,57 @@ function presentRoom(room, userId) {
     isSystem: false,
   };
 }
+
+router.get('/leaderboard', protect, async (req, res) => {
+  const period = req.query.period === 'weekly' ? 'weekly' : 'all-time';
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+
+  if (period === 'all-time') {
+    const users = await User.find({ isDeleted: false })
+      .select('name avatar activityDates stats.quizzesCompleted stats.lessonsGenerated stats.totalStudyDays')
+      .lean();
+    const entries = users.map(user => ({
+      name: user.name || 'Student',
+      avatar: user.avatar || '',
+      points: (user.stats?.quizzesCompleted || 0) * 10
+        + (user.stats?.lessonsGenerated || 0) * 5
+        + (user.stats?.totalStudyDays ?? user.activityDates?.length ?? 0) * 2,
+    })).filter(entry => entry.points > 0)
+      .sort((left, right) => right.points - left.points || left.name.localeCompare(right.name))
+      .slice(0, 50)
+      .map((entry, index) => ({ rank: index + 1, ...entry }));
+    return res.json({ period, entries });
+  }
+
+  const weekday = (now.getUTCDay() + 6) % 7;
+  const weekStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - weekday));
+  const weekStartKey = weekStart.toISOString().slice(0, 10);
+  const weeklyEvents = await StudyPointEvent.aggregate([
+    { $match: { createdAt: { $gte: weekStart } } },
+    { $group: { _id: '$user', points: { $sum: '$points' } } },
+  ]);
+  const eventPoints = new Map(weeklyEvents.map(event => [event._id.toString(), event.points]));
+  const users = await User.find({
+    isDeleted: false,
+    $or: [
+      { _id: { $in: weeklyEvents.map(event => event._id) } },
+      { activityDates: { $elemMatch: { $gte: weekStartKey, $lte: today } } },
+    ],
+  }).select('name avatar activityDates').lean();
+  const entries = users.map(user => {
+    const activeDays = (user.activityDates || []).filter(date => date >= weekStartKey && date <= today).length;
+    return {
+      name: user.name || 'Student',
+      avatar: user.avatar || '',
+      points: (eventPoints.get(user._id.toString()) || 0) + activeDays * 2,
+    };
+  }).filter(entry => entry.points > 0)
+    .sort((left, right) => right.points - left.points || left.name.localeCompare(right.name))
+    .slice(0, 50)
+    .map((entry, index) => ({ rank: index + 1, ...entry }));
+  res.json({ period, entries });
+});
 
 router.get('/rooms', protect, async (req, res) => {
   const memberships = await ChatRoom.find({ members: req.user._id }).sort({ updatedAt: -1 }).limit(100);

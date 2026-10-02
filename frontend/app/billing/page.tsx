@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button';
 import { useStore } from '@/lib/store';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import { Copy } from 'lucide-react';
 
 type Cycle = 'monthly' | 'annual';
 
@@ -24,6 +25,10 @@ function BillingContent() {
   const searchParams = useSearchParams();
   const [cycle, setCycle] = useState<Cycle>('monthly');
   const [loading, setLoading] = useState<string|null>(null);
+  const [codeInput, setCodeInput] = useState('');
+  const [discount, setDiscount] = useState<{ code: string; percentOff: number; amount: number; planType: string } | null>(null);
+  const [validatingCode, setValidatingCode] = useState(false);
+  const [referral, setReferral] = useState<{ code: string; percentOff: number; expiresAt: string; usesRemaining: number; rewardDays: number } | null>(null);
 
   useEffect(() => {
     // Handle return from Paystack
@@ -35,6 +40,38 @@ function BillingContent() {
       toast.error('Payment cancelled.');
     }
   }, []);
+
+  useEffect(() => {
+    api.get('/billing/referral').then(({ data }) => setReferral(data)).catch(() => {});
+  }, []);
+
+  const selectedPlanType = cycle === 'annual' ? 'pro_annual' : 'pro_monthly';
+
+  const applyDiscount = async () => {
+    if (!codeInput.trim()) return;
+    setValidatingCode(true);
+    try {
+      const { data } = await api.post('/billing/codes/validate', { code: codeInput, planType: selectedPlanType });
+      setDiscount({ ...data, planType: selectedPlanType });
+      setCodeInput(data.code);
+      toast.success(`${data.percentOff}% discount applied`);
+    } catch (error: any) {
+      setDiscount(null);
+      toast.error(error.response?.data?.error || 'Could not validate this code');
+    } finally {
+      setValidatingCode(false);
+    }
+  };
+
+  const copyReferral = async () => {
+    if (!referral) return;
+    try {
+      await navigator.clipboard.writeText(referral.code);
+      toast.success('Referral code copied');
+    } catch {
+      toast.error(`Referral code: ${referral.code}`);
+    }
+  };
 
   const verifyPaystack = async (ref: string) => {
     try {
@@ -52,7 +89,7 @@ function BillingContent() {
     const planType = cycle === 'annual' ? 'pro_annual' : 'pro_monthly';
     setLoading(planId);
     try {
-      const { data } = await api.post('/billing/paystack/initialize', { planType });
+      const { data } = await api.post('/billing/paystack/initialize', { planType, code: discount?.planType === planType ? discount.code : '' });
       window.location.href = data.url;
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Could not start checkout');
@@ -81,12 +118,21 @@ function BillingContent() {
         <div>
           <p className="text-[12px] text-text3 mb-2">Billing cycle</p>
           <div className="flex gap-2">
-            <Button size="sm" variant={cycle==='monthly'?'primary':'ghost'} onClick={()=>setCycle('monthly')}>Monthly</Button>
-            <Button size="sm" variant={cycle==='annual'?'primary':'ghost'} onClick={()=>setCycle('annual')}>Annual</Button>
+            <Button size="sm" variant={cycle==='monthly'?'primary':'ghost'} onClick={()=>{setCycle('monthly');setDiscount(null);}}>Monthly</Button>
+            <Button size="sm" variant={cycle==='annual'?'primary':'ghost'} onClick={()=>{setCycle('annual');setDiscount(null);}}>Annual</Button>
             {cycle==='annual' && <span className="self-center text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{background:'rgba(62,207,142,.15)',color:'var(--green)',border:'1px solid rgba(62,207,142,.3)'}}>Save 17%</span>}
           </div>
         </div>
         <div className="self-end max-w-[300px] pb-1 text-[12px] text-text2">Paystack · Ghana cedis · Card or mobile money. PIN approval happens through Paystack and your mobile network.</div>
+      </div>
+
+      <div className="mb-6 max-w-2xl">
+        <label htmlFor="discount-code" className="mb-2 block text-[12px] font-medium text-text2">Discount or referral code</label>
+        <div className="flex flex-wrap gap-2">
+          <input id="discount-code" value={codeInput} onChange={event => { setCodeInput(event.target.value.toUpperCase()); setDiscount(null); }} maxLength={32} autoCapitalize="characters" placeholder="Enter code" className="min-w-0 flex-1 rounded-lg border border-border2 bg-surface px-3 py-2.5 text-[13px] uppercase text-text placeholder:normal-case placeholder:text-text3" />
+          <Button variant="ghost" onClick={applyDiscount} disabled={!codeInput.trim() || validatingCode}>{validatingCode ? 'Checking…' : 'Apply code'}</Button>
+        </div>
+        {discount?.planType === selectedPlanType && <p className="mt-2 text-[12px] text-green">{discount.percentOff}% off · checkout total GH₵{(discount.amount / 100).toFixed(2)}</p>}
       </div>
 
       {/* Plan cards */}
@@ -100,8 +146,9 @@ function BillingContent() {
               {p.popular && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-white text-[11px] font-bold px-4 py-1 rounded-full whitespace-nowrap">Most Popular</div>}
               <div className="mb-4">
                 <div className="text-[15px] font-semibold text-text mb-2">{p.name}</div>
-                <div className="flex items-baseline gap-1">
-                  <span className="font-dm-serif text-[36px] text-text">{p.id==='free' ? 'GH₵0' : `GH₵${price}`}</span>
+                <div className="flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
+                  <span className="font-dm-serif text-[36px] text-text">{p.id==='free' ? 'GH₵0' : discount?.planType === selectedPlanType ? `GH₵${(discount.amount / 100).toFixed(2)}` : `GH₵${price}`}</span>
+                  {p.id !== 'free' && discount?.planType === selectedPlanType && <span className="text-[12px] text-text3 line-through">GH₵{price}</span>}
                   <span className="text-[13px] text-text3">{p.id==='free' ? 'forever' : cycle==='annual' ? '/yr' : '/mo'}</span>
                 </div>
                 {cycle==='annual' && p.id!=='free' && <div className="text-[12px] text-green mt-1">≈ GH₵{perMonth}/month</div>}
@@ -125,6 +172,19 @@ function BillingContent() {
           );
         })}
       </div>
+
+      {referral && <section className="mb-6 max-w-2xl border-y border-border py-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h3 className="font-dm-serif text-[18px] text-text">Refer a study partner</h3>
+            <p className="mt-1 max-w-xl text-[12px] leading-relaxed text-text3">They get {referral.percentOff}% off their first Pro plan. You earn {referral.rewardDays} Pro days after their payment is verified. {referral.usesRemaining} uses remaining.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <code className="rounded-md border border-border bg-surface2 px-3 py-2 text-[12px] font-semibold text-text">{referral.code}</code>
+            <button type="button" onClick={copyReferral} aria-label="Copy referral code" title="Copy referral code" className="rounded-md border border-border2 bg-surface p-2 text-text2 hover:border-accent hover:text-accent"><Copy size={15} aria-hidden="true" /></button>
+          </div>
+        </div>
+      </section>}
 
       {/* What Pro unlocks */}
       <Card className="mb-6">
@@ -156,7 +216,7 @@ function BillingContent() {
           ['How do I approve a mobile-money payment?','Paystack opens a secure checkout. Enter your mobile-money number there, then approve the request using your network’s prompt or instructions. MedPrep never asks for your MoMo PIN.'],
           ['What currency do you charge?','All plan prices are shown and charged in Ghana cedis (GHS) through Paystack.'],
           ['Will I lose my data if I downgrade?','No — all your progress and history is preserved.'],
-          ['Is there a student discount?','Email us with your .edu or university ID for 20% off.'],
+          ['How can I get a discount?','Apply a valid discount code at checkout, or ask a MedPrep student for their referral code.'],
         ].map(([q,a]) => (
           <div key={q} className="border-b border-border py-3.5 last:border-0">
             <div className="font-medium text-text text-[14px] mb-1">{q}</div>

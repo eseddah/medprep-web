@@ -28,6 +28,8 @@ interface ChatRoom {
 }
 
 type Connection = 'connecting' | 'connected' | 'offline';
+type LeaderboardPeriod = 'weekly' | 'all-time';
+type LeaderboardEntry = { rank: number; name: string; avatar: string; points: number };
 const LOUNGE_ID = 'study-lounge';
 const DEFAULT_ROOM: ChatRoom = {
   id: LOUNGE_ID,
@@ -58,6 +60,10 @@ export default function ChatPage() {
   const [groupDescription, setGroupDescription] = useState('');
   const [discoverable, setDiscoverable] = useState(true);
   const [joinCode, setJoinCode] = useState('');
+  const [loungeView, setLoungeView] = useState<'chat' | 'leaderboard'>('chat');
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>('weekly');
+  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const activeRoomRef = useRef(LOUNGE_ID);
   const socketRef = useRef<Socket | null>(null);
   const joinSocketRoomRef = useRef<(roomId: string) => void>(() => {});
@@ -134,6 +140,17 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages]);
 
+  useEffect(() => {
+    if (activeRoomId !== LOUNGE_ID || loungeView !== 'leaderboard') return;
+    let active = true;
+    setLeaderboardLoading(true);
+    api.get('/chat/leaderboard', { params: { period: leaderboardPeriod } })
+      .then(({ data }) => { if (active) setLeaderboardEntries(data.entries || []); })
+      .catch(() => { if (active) toast.error('Leaderboard could not be loaded'); })
+      .finally(() => { if (active) setLeaderboardLoading(false); });
+    return () => { active = false; };
+  }, [activeRoomId, leaderboardPeriod, loungeView]);
+
   const sendMessage = (event?: FormEvent) => {
     event?.preventDefault();
     const text = draft.trim();
@@ -197,6 +214,7 @@ export default function ChatPage() {
     socketRef.current?.emit('chat:leave', { roomId: activeRoomRef.current });
     activeRoomRef.current = roomId;
     setActiveRoomId(roomId);
+    setLoungeView('chat');
     setEditingMessageId('');
     setMessages([]);
     setHistoryLoaded(false);
@@ -312,6 +330,51 @@ export default function ChatPage() {
             </div>
           </header>
 
+          {activeRoom.isSystem && (
+            <div className="flex gap-1 border-b border-border bg-surface px-3 py-2" role="tablist" aria-label="Study Lounge views">
+              {(['chat', 'leaderboard'] as const).map(view => (
+                <button key={view} type="button" role="tab" aria-selected={loungeView === view} onClick={() => setLoungeView(view)} className={`rounded-md px-3 py-2 text-[12px] font-medium capitalize ${loungeView === view ? 'bg-surface3 text-text' : 'text-text3 hover:bg-surface2 hover:text-text'}`}>
+                  {view === 'chat' ? 'Messages' : 'Leaderboard'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {activeRoom.isSystem && loungeView === 'leaderboard' ? (
+            <div className="min-h-0 flex-1 overflow-y-auto bg-bg px-4 py-5 md:px-6">
+              <div className="mx-auto max-w-2xl">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-dm-serif text-[20px] text-text">Study points</h3>
+                    <p className="mt-1 text-[12px] text-text3">Quizzes, lessons, and active study days</p>
+                  </div>
+                  <div className="inline-flex rounded-lg border border-border2 bg-surface2 p-1" role="group" aria-label="Leaderboard period">
+                    {(['weekly', 'all-time'] as const).map(period => (
+                      <button key={period} type="button" aria-pressed={leaderboardPeriod === period} onClick={() => setLeaderboardPeriod(period)} className={`rounded-md px-3 py-2 text-[11px] font-medium capitalize ${leaderboardPeriod === period ? 'bg-surface text-text shadow-sm' : 'text-text3'}`}>
+                        {period === 'all-time' ? 'All time' : 'This week'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {leaderboardLoading ? <p className="py-8 text-center text-[13px] text-text3">Loading rankings…</p>
+                  : leaderboardEntries.length === 0 ? <p className="rounded-lg border border-border bg-surface px-4 py-8 text-center text-[13px] text-text3">No study points yet for this period.</p>
+                    : <ol className="divide-y divide-border border-y border-border">
+                      {leaderboardEntries.map(entry => (
+                        <li key={`${entry.rank}-${entry.name}`} className="flex min-w-0 items-center gap-3 py-3">
+                          <span className="w-7 shrink-0 text-center text-[12px] font-semibold tabular-nums text-text3">{entry.rank}</span>
+                          {entry.avatar
+                            ? <img src={entry.avatar} alt="" className="h-9 w-9 shrink-0 rounded-full border border-border object-cover" />
+                            : <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-surface2 text-[12px] font-semibold text-text2">{entry.name.trim().slice(0, 1).toUpperCase() || 'S'}</span>}
+                          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-text">{entry.name}</span>
+                          <span className="shrink-0 text-[12px] font-semibold tabular-nums text-accent">{entry.points} pts</span>
+                        </li>
+                      ))}
+                    </ol>}
+              </div>
+            </div>
+          ) : (
+          <>
+
           <div className="lg:hidden flex items-center gap-2 overflow-x-auto border-b border-border bg-surface2 px-3 py-2">
             {rooms.map(room => (
               <button key={room.id} type="button" onClick={() => room.joined ? openRoom(room.id) : joinDiscoverableRoom(room)} className={`max-w-40 shrink-0 rounded-lg border px-3 py-2 text-[11px] font-medium truncate ${room.id === activeRoomId ? 'bg-accent text-white border-accent' : 'bg-surface text-text2 border-border2'}`}>{room.joined ? room.name : `Join · ${room.name}`}</button>
@@ -387,6 +450,8 @@ export default function ChatPage() {
               <Send size={18} aria-hidden="true" />
             </button>
           </form>
+          </>
+          )}
         </section>
       </div>
 

@@ -2,12 +2,14 @@ const router = require('express').Router();
 const { protect, requirePro } = require('../middleware/auth');
 const User = require('../models/User');
 const Progress = require('../models/Progress');
+const StudyPointEvent = require('../models/StudyPointEvent');
 const COURSES = require('../lib/coursesData');
 const { reserveDailyConcept, releaseDailyConcept, FREE_DAILY_CONCEPT_LIMIT } = require('../lib/studyActivity');
 const { callAI, callAIStream, isConfigured, parseJsonText } = require('../lib/gemini');
 const { cacheGeneration, getCachedGeneration } = require('../lib/aiCache');
 
 const AI_SETUP_ERROR = 'AI generation is not configured. Add GEMINI_API_KEY to the backend environment and restart the API.';
+const CLEAN_DIAGRAM_FORMAT = 'Never use ASCII art, Unicode box-drawing trees, code blocks, pipe-character flowcharts, or arrow symbols to illustrate a process. Explain processes as a numbered Markdown list or a simple Markdown table.';
 
 // Question limits by plan
 const QUIZ_LIMITS = { free: 10, pro: 150, annual: 250 };
@@ -44,6 +46,7 @@ Make questions clinically accurate, high-yield, and exam-relevant.`;
 
     // Track stats
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'stats.quizzesCompleted': 1 } });
+    await StudyPointEvent.create({ user: req.user._id, type: 'quiz', points: 10 });
 
     res.json({ questions, count: questions.length, plan, maxAllowed: maxQ });
   } catch (e) {
@@ -117,7 +120,7 @@ Format:
 > Clinical pearl / high-yield point
 - Bullet points
 Regular explanatory paragraphs.
-Use Markdown tables for comparisons and fenced text blocks for at least one labeled concept map, process diagram, or ASCII illustration. Include learning objectives, prerequisites, foundational concepts, detailed mechanisms, pathophysiology or derivations, a fully worked example, clinical or real-world relevance, common misconceptions, retrieval questions with answers, and exam tips. For calculations, show every step and units. For clinical topics, label scenarios as educational and never present them as personal medical advice.`;
+Use clean Markdown headings, paragraphs, bold text, numbered lists, bullet lists, and simple tables. ${CLEAN_DIAGRAM_FORMAT} Include learning objectives, prerequisites, foundational concepts, detailed mechanisms, pathophysiology or derivations, a fully worked example, clinical or real-world relevance, common misconceptions, retrieval questions with answers, and exam tips. For calculations, show every step and units. For clinical topics, label scenarios as educational and never present them as personal medical advice.`;
 
   const userMsg = previousContent
     ? `Continue this partially generated lesson without repeating its existing sections. Continue the interrupted thought and complete the remaining lesson:\n\n${previousContent}`
@@ -152,6 +155,7 @@ Use Markdown tables for comparisons and fenced text blocks for at least one labe
     }
 
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'stats.lessonsGenerated': 1 } });
+    await StudyPointEvent.create({ user: req.user._id, type: 'lesson', points: 5 });
     if (shouldCacheLesson && lessonText && !reachedTokenLimit) {
       await cacheGeneration('lesson', generationOptions, lessonText);
     }
@@ -191,7 +195,7 @@ router.post('/tutor', protect, requirePro, async (req, res) => {
     const prompt = messages.map(message => `${message.role === 'assistant' ? 'MedPrep Tutor' : 'Student'}: ${message.content}`).join('\n\n');
     const message = await callAI({
       maxOutputTokens: 3000,
-      system: `You are MedPrep Tutor, a patient Socratic tutor for medical, premed, and mathematics learners. ${context ? `Current course context: ${context}.` : ''} Answer accurately and clearly, first diagnose the learner’s confusion, then explain concepts in ordered steps with a small worked example or a fenced text diagram/table when useful. Ask one focused follow-up question at the end. When a learner provides course notes, ground the explanation in those notes. Do not claim that your answer is externally source-verified and never invent citations or URLs. For clinical topics, use educational framing and do not diagnose real people.`,
+      system: `You are MedPrep Tutor, a patient Socratic tutor for medical, premed, and mathematics learners. ${context ? `Current course context: ${context}.` : ''} Answer accurately and clearly, first diagnose the learner’s confusion, then explain concepts in ordered steps with a small worked example or a simple table when useful. ${CLEAN_DIAGRAM_FORMAT} Ask one focused follow-up question at the end. When a learner provides course notes, ground the explanation in those notes. Do not claim that your answer is externally source-verified and never invent citations or URLs. For clinical topics, use educational framing and do not diagnose real people.`,
       prompt,
     });
     res.json({ message });
@@ -214,7 +218,7 @@ router.post('/case', protect, async (req, res) => {
   try {
     const raw = await callAI({
       maxOutputTokens: 5000,
-      system: `Create a synthetic educational ${track.toLowerCase()} case round for a student studying ${course.title}, focused on ${topic}. This is coursework, not guidance for a real patient. Use a short, plausible vignette and 3 progressive decision steps. For premed courses, use a clinical or laboratory context to teach foundational biology, chemistry, physics, psychology, or mathematics. Make explanations rigorous, teach the underlying concepts, and do not invent citations. Return only valid JSON with this shape: {"title":"...","caseStem":"...","learningObjectives":["..."],"illustration":"A concise plain-text concept flow using arrows","steps":[{"prompt":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"..."}],"debrief":"..."}. Include exactly 3 steps, each with 4 options and detailed rationales.`,
+      system: `Create a synthetic educational ${track.toLowerCase()} case round for a student studying ${course.title}, focused on ${topic}. This is coursework, not guidance for a real patient. Use a short, plausible vignette and 3 progressive decision steps. For premed courses, use a clinical or laboratory context to teach foundational biology, chemistry, physics, psychology, or mathematics. Make explanations rigorous, teach the underlying concepts, and do not invent citations. ${CLEAN_DIAGRAM_FORMAT} Return only valid JSON with this shape: {"title":"...","caseStem":"...","learningObjectives":["..."],"illustration":"A short numbered Markdown list describing a process, or an empty string","steps":[{"prompt":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"..."}],"debrief":"..."}. Include exactly 3 steps, each with 4 options and detailed rationales.`,
       prompt: `Track: ${track}\nCourse: ${course.title}\nTopic: ${topic}\nCreate the case now.`,
     });
     const caseStudy = parseJsonText(raw);

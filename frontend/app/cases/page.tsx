@@ -1,12 +1,12 @@
 'use client';
 import { useState } from 'react';
-import { BookOpenCheck, ChevronRight, RotateCcw, Sparkles } from 'lucide-react';
+import { BookOpenCheck, ChevronRight, RotateCcw } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import { COURSES, Course } from '@/lib/courses';
-import { formatLesson } from '@/lib/lessonContent';
+import { formatInline, formatLesson } from '@/lib/lessonContent';
 import api from '@/lib/api';
 import { recordStreakActivity } from '@/lib/streak';
 import toast from 'react-hot-toast';
@@ -111,7 +111,7 @@ export default function CasesPage() {
             </div>
           </Card>
           <Button variant="primary" onClick={generate} disabled={loading}>
-            {loading ? <><Spinner />Building case…</> : <><Sparkles size={16} /> Generate case round</>}
+            {loading ? <><Spinner />Building case…</> : <><BookOpenCheck size={16} /> Generate case round</>}
           </Button>
           <p className="mt-3 max-w-xl text-[11px] leading-relaxed text-text3">Cases are synthetic learning exercises, not advice for real patient care. Each round includes three decisions and concept explanations.</p>
         </div>
@@ -120,13 +120,13 @@ export default function CasesPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-[11px] uppercase tracking-wide text-text3">{track} · {course.title} · {topic}</p>
-              <h2 className="font-dm-serif text-[24px] text-text">{caseStudy.title}</h2>
+              <h2 className="font-dm-serif text-[24px] text-text">{formatInline(caseStudy.title)}</h2>
             </div>
             <Button variant="ghost" size="sm" onClick={generate} disabled={loading}><RotateCcw size={15} /> New case</Button>
           </div>
           <Card>
             <div className="text-[14px] leading-relaxed text-text2">{formatLesson(caseStudy.caseStem)}</div>
-            {caseStudy.learningObjectives?.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{caseStudy.learningObjectives.map(objective => <span key={objective} className="rounded-md border border-border bg-surface2 px-2.5 py-1 text-[11px] text-text2">{objective}</span>)}</div>}
+            {caseStudy.learningObjectives?.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{caseStudy.learningObjectives.map(objective => <span key={objective} className="rounded-md border border-border bg-surface2 px-2.5 py-1 text-[11px] text-text2">{formatInline(objective)}</span>)}</div>}
           </Card>
           <Card>
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -147,7 +147,7 @@ export default function CasesPage() {
                     const correct = revealed && index === step.correctIndex;
                     const incorrect = revealed && choice === index && index !== step.correctIndex;
                     return <button key={option} type="button" disabled={revealed} onClick={() => setChoice(index)} className={`w-full rounded-lg border px-3.5 py-3 text-left text-[13px] transition-colors ${correct ? 'border-green bg-green/10 text-green' : incorrect ? 'border-red bg-red/10 text-red' : choice === index ? 'border-accent bg-accent/10 text-text' : 'border-border2 bg-surface2 text-text2 hover:border-accent'}`}>
-                      <span className="mr-2 font-semibold">{String.fromCharCode(65 + index)}.</span>{option}
+                      <span className="mr-2 font-semibold">{String.fromCharCode(65 + index)}.</span><span>{formatInline(option)}</span>
                     </button>;
                   })}
                 </div>
@@ -160,7 +160,7 @@ export default function CasesPage() {
               </>
             )}
           </Card>
-          {caseStudy.illustration && <pre className="overflow-x-auto rounded-lg border border-border bg-surface2 p-4 text-[12px] leading-relaxed text-text2 whitespace-pre-wrap">{caseStudy.illustration}</pre>}
+          {caseStudy.illustration && <div className="text-[13px] leading-relaxed text-text2">{formatLesson(caseStudy.illustration)}</div>}
         </div>
       )}
     </DashboardLayout>

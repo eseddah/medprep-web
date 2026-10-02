@@ -4,9 +4,9 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   name:      { type: String, required: true, trim: true },
   email:     { type: String, required: true, unique: true, lowercase: true },
+  emailVerified: { type: Boolean, default: false },
   password:  { type: String, required: true, minlength: 6 },
   plan:      { type: String, enum: ['free', 'pro', 'annual'], default: 'free' },
-  role:      { type: String, enum: ['student', 'admin'], default: 'student' },
   avatar:    { type: String, default: '' },
   bio:       { type: String, default: '' },
   school:    { type: String, default: '' },
@@ -35,6 +35,7 @@ const userSchema = new mongoose.Schema({
     quizzesCompleted:   { type: Number, default: 0 },
     flashcardsStudied:  { type: Number, default: 0 },
     lessonsGenerated:   { type: Number, default: 0 },
+    totalStudyDays:     { type: Number, default: 0 },
     dailyConceptsUsed:  { type: Number, default: 0 },
     dailyConceptsDate:  { type: String, default: '' },
     totalScore:         { type: Number, default: 0 },
@@ -55,6 +56,8 @@ userSchema.methods.matchPassword = function(pw) {
 userSchema.methods.toPublic = function() {
   const o = this.toObject();
   delete o.password;
+  delete o.emailVerified;
+  delete o.role;
   delete o.studyReminderSentDate;
   delete o.studyReminderLockUntil;
   delete o.studyReminderLockToken;

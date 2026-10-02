@@ -1,85 +1,182 @@
-import { Fragment, ReactNode } from 'react';
+import { ReactNode } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { ArrowDown } from 'lucide-react';
 
-function renderInlineMarkdown(text: string): ReactNode[] {
-  if (!text) return [];
+type ContentBlock = { markdown: string } | { steps: string[] };
 
-  const fragments: ReactNode[] = [];
-  const pattern = /(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`)/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) fragments.push(text.slice(lastIndex, match.index));
-
-    const token = match[0];
-    const inner = token.replace(/^(`|\*\*|__)/, '').replace(/(\*\*|__|`)$/, '');
-    fragments.push(token.startsWith('`') ? <code key={`${token}-${lastIndex}`} className="rounded bg-surface2 px-1 py-0.5 font-mono text-[11px] text-text">{inner}</code> : <strong key={`${token}-${lastIndex}`} className="font-semibold text-text">{inner}</strong>);
-    lastIndex = match.index + token.length;
-  }
-
-  if (lastIndex < text.length) fragments.push(text.slice(lastIndex));
-  return fragments;
+function cleanFlowLabel(value: string) {
+  return value.trim()
+    .replace(/^\[(.*)\]$/, '$1')
+    .replace(/^#{1,6}\s*/, '')
+    .replace(/^(?:[-*+]\s+|\d+[.)]\s+)/, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/^[\s|:_\-│┃├└┌┬─┤┘┐┴┼]+|[\s|:_\-│┃├└┌┬─┤┘┐┴┼]+$/g, '')
+    .trim();
 }
 
-function tableCells(line: string) {
-  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+function parseArrowFlow(value: string): string[] | null {
+  if (!/(?:->|→|▼|↓)/.test(value)) return null;
+  const steps = value.split(/\s*(?:->|→|▼|↓)\s*/).map(cleanFlowLabel).filter(Boolean);
+  return steps.length > 1 ? steps : null;
+}
+
+function isFlowConnector(line: string) {
+  const connector = line.replace(/\s/g, '');
+  return /^[|vV▼↓:.-]+$/.test(connector) && /[vV▼↓]/.test(connector);
+}
+
+function parseVerticalFlow(lines: string[], start: number) {
+  const first = cleanFlowLabel(lines[start]);
+  if (!first || /^```/.test(first) || first.startsWith('|')) return null;
+
+  const steps = [first];
+  let cursor = start + 1;
+  while (cursor < lines.length && isFlowConnector(lines[cursor])) {
+    while (cursor < lines.length && isFlowConnector(lines[cursor])) cursor += 1;
+    if (cursor >= lines.length || !lines[cursor].trim()) break;
+    const next = cleanFlowLabel(lines[cursor]);
+    if (!next || next.startsWith('|') || /^```/.test(next)) break;
+    steps.push(next);
+    cursor += 1;
+  }
+
+  return steps.length > 1 ? { steps, end: cursor - 1 } : null;
+}
+
+function parseLegacyFlow(value: string): string[] | null {
+  const lines = value.split(/\r?\n/).filter(line => line.trim());
+  const treeLines = lines.filter(line => /[│┃├└┌┬─┤┘┐┴┼]/.test(line));
+  if (treeLines.length > 1) {
+    const steps = lines.map(cleanFlowLabel).filter(Boolean);
+    if (steps.length > 1) return steps;
+  }
+  const vertical = parseVerticalFlow(lines, 0);
+  if (vertical && vertical.end === lines.length - 1) return vertical.steps;
+  const arrowLines = lines.filter(line => /(?:->|→|▼|↓)/.test(line));
+  if (!arrowLines.length) return null;
+  const steps = arrowLines.flatMap(line => parseArrowFlow(line) || []);
+  return steps.length > 1 ? steps : null;
+}
+
+function splitContent(text: string): ContentBlock[] {
+  const lines = text.split(/\r?\n/);
+  const blocks: ContentBlock[] = [];
+  let markdown: string[] = [];
+  const flushMarkdown = () => {
+    if (markdown.length) blocks.push({ markdown: markdown.join('\n') });
+    markdown = [];
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (/^\s*```/.test(lines[index])) {
+      const closing = lines.findIndex((line, lineIndex) => lineIndex > index && /^\s*```/.test(line));
+      if (closing > index) {
+        const fencedContent = lines.slice(index + 1, closing).join('\n');
+        const flow = parseLegacyFlow(fencedContent);
+        if (flow) {
+          flushMarkdown();
+          blocks.push({ steps: flow });
+        } else {
+          markdown.push(...lines.slice(index, closing + 1));
+        }
+        index = closing;
+        continue;
+      }
+    }
+
+    const vertical = parseVerticalFlow(lines, index);
+    if (vertical) {
+      flushMarkdown();
+      blocks.push({ steps: vertical.steps });
+      index = vertical.end;
+      continue;
+    }
+
+    const arrowFlow = parseArrowFlow(lines[index]);
+    if (arrowFlow) {
+      flushMarkdown();
+      blocks.push({ steps: arrowFlow });
+      continue;
+    }
+
+    markdown.push(lines[index]);
+  }
+
+  flushMarkdown();
+  return blocks;
+}
+
+function FlowDiagram({ steps }: { steps: string[] }) {
+  return (
+    <div className="my-5 rounded-md border border-border bg-surface2 px-3 py-4 sm:px-5" role="img" aria-label={`Process steps: ${steps.join(', ')}`}>
+      <ol className="flex flex-col items-center">
+        {steps.map((step, index) => (
+          <li key={`${step}-${index}`} className="flex w-full flex-col items-center">
+            <div className="w-full max-w-xl break-words rounded-md border border-border bg-surface px-4 py-3 text-center text-[13px] leading-relaxed text-text shadow-none">
+              {step}
+            </div>
+            {index < steps.length - 1 && <ArrowDown aria-hidden="true" className="my-1.5 h-4 w-4 shrink-0 text-text3" strokeWidth={1.5} />}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function Markdown({ children }: { children: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        h1: ({ children }) => <h2 className="mb-3 mt-7 font-dm-serif text-[22px] leading-snug text-text first:mt-0">{children}</h2>,
+        h2: ({ children }) => <h3 className="mb-2 mt-6 font-dm-serif text-[19px] leading-snug text-text">{children}</h3>,
+        h3: ({ children }) => <h4 className="mb-1.5 mt-4 text-[15px] font-semibold text-text">{children}</h4>,
+        p: ({ children }) => <p className="mb-3 text-[14px] leading-[1.75] text-text2">{children}</p>,
+        strong: ({ children }) => <strong className="font-semibold text-text">{children}</strong>,
+        ul: ({ children }) => <ul className="mb-4 list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed text-text2 marker:text-accent">{children}</ul>,
+        ol: ({ children }) => <ol className="mb-4 list-decimal space-y-1.5 pl-5 text-[14px] leading-relaxed text-text2 marker:font-semibold marker:text-accent">{children}</ol>,
+        li: ({ children }) => <li className="pl-1">{children}</li>,
+        blockquote: ({ children }) => <blockquote className="my-4 border-l-2 border-accent px-4 py-2 text-[13px] leading-relaxed text-text2">{children}</blockquote>,
+        table: ({ children }) => <div className="my-5 max-w-full overflow-x-auto rounded-md border border-border"><table className="w-full border-collapse text-left text-[12px]">{children}</table></div>,
+        thead: ({ children }) => <thead className="bg-surface2 text-text">{children}</thead>,
+        th: ({ children }) => <th className="border-b border-border px-3 py-2.5 font-semibold">{children}</th>,
+        td: ({ children }) => <td className="border-b border-border px-3 py-2.5 align-top text-text2 last:border-0">{children}</td>,
+        tr: ({ children }) => <tr className="odd:bg-surface even:bg-surface2/40">{children}</tr>,
+        a: ({ children, href }) => <a href={href} className="font-medium text-accent underline decoration-border2 underline-offset-2">{children}</a>,
+        pre: ({ children }) => <pre className="my-4 max-w-full overflow-x-auto rounded-md border border-border bg-surface2 p-4 font-mono text-[12px] leading-relaxed text-text">{children}</pre>,
+        code: ({ children, className }) => <code className={className || 'rounded bg-surface2 px-1 py-0.5 font-mono text-[12px] text-text'}>{children}</code>,
+        hr: () => <hr className="my-6 border-border" />,
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
+
+export function formatInline(text: string): ReactNode {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => <>{children}</>,
+        strong: ({ children }) => <strong className="font-semibold text-text">{children}</strong>,
+        em: ({ children }) => <em>{children}</em>,
+        del: ({ children }) => <del>{children}</del>,
+        code: ({ children }) => <code className="rounded bg-surface2 px-1 py-0.5 font-mono text-[12px] text-text">{children}</code>,
+        a: ({ children, href }) => <a href={href} className="font-medium text-accent underline decoration-border2 underline-offset-2">{children}</a>,
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
 }
 
 export function formatLesson(text: string): ReactNode[] {
-  if (typeof text !== 'string') return [];
-  const lines = text.split('\n');
-  const output: ReactNode[] = [];
-  let codeLines: string[] | null = null;
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (line.trim().startsWith('```')) {
-      if (codeLines) {
-        output.push(<pre key={`diagram-${index}`} className="my-4 overflow-x-auto rounded-lg border border-border bg-surface2 p-4 font-mono text-[12px] leading-relaxed text-text whitespace-pre">{codeLines.join('\n')}</pre>);
-        codeLines = null;
-      } else {
-        codeLines = [];
-      }
-      continue;
-    }
-    if (codeLines) {
-      codeLines.push(line);
-      continue;
-    }
-    if (!line.trim()) {
-      output.push(<div key={`space-${index}`} className="h-2" />);
-      continue;
-    }
-    if (line.trim().startsWith('|')) {
-      const tableLines = [];
-      while (index < lines.length && lines[index].trim().startsWith('|')) {
-        tableLines.push(lines[index]);
-        index += 1;
-      }
-      index -= 1;
-      const rows = tableLines.map(tableCells).filter(cells => !cells.every(cell => /^:?-{3,}:?$/.test(cell)));
-      const [header, ...body] = rows;
-      if (header?.length) output.push(
-        <div key={`table-${index}`} className="my-4 overflow-x-auto rounded-lg border border-border">
-          <table className="w-full border-collapse text-left text-[12px]">
-            <thead className="bg-surface2 text-text"><tr>{header.map((cell, cellIndex) => <th key={cellIndex} className="border-b border-border px-3 py-2 font-semibold">{cell}</th>)}</tr></thead>
-            <tbody>{body.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} className="border-b border-border px-3 py-2 align-top text-text2 last:border-0">{cell}</td>)}</tr>)}</tbody>
-          </table>
-        </div>,
-      );
-      continue;
-    }
-    const trimmed = line.trim();
-
-    if (line.startsWith('# ')) output.push(<h2 key={index} className="font-dm-serif text-[22px] text-text mt-6 mb-2">{renderInlineMarkdown(line.slice(2))}</h2>);
-    else if (line.startsWith('## ')) output.push(<h3 key={index} className="font-semibold text-[15px] text-text mt-4 mb-1.5">{renderInlineMarkdown(line.slice(3))}</h3>);
-    else if (line.startsWith('### ')) output.push(<h4 key={index} className="font-semibold text-[14px] text-text mt-3 mb-1">{renderInlineMarkdown(line.slice(4))}</h4>);
-    else if (line.startsWith('> ')) output.push(<div key={index} className="my-3 rounded-r-lg border-l-[3px] border-accent bg-accent/10 px-4 py-3 text-[13px] leading-relaxed text-text">{renderInlineMarkdown(line.slice(2))}</div>);
-    else if (line.startsWith('- ') || line.startsWith('* ')) output.push(<div key={index} className="flex gap-2 text-[14px] leading-relaxed text-text2 pl-3"><span className="text-accent">•</span><span>{renderInlineMarkdown(line.slice(2))}</span></div>);
-    else if (/^\d+\. /.test(trimmed)) output.push(<p key={index} className="text-[14px] leading-relaxed text-text2 pl-3">{renderInlineMarkdown(trimmed.replace(/^\d+\.\s*/, ''))}</p>);
-    else output.push(<p key={index} className="text-[14px] leading-[1.75] text-text2 mb-1">{renderInlineMarkdown(trimmed)}</p>);
-  }
-
-  if (codeLines?.length) output.push(<pre key="diagram-final" className="my-4 overflow-x-auto rounded-lg border border-border bg-surface2 p-4 font-mono text-[12px] leading-relaxed text-text whitespace-pre">{codeLines.join('\n')}</pre>);
-  return output.map((node, index) => <Fragment key={index}>{node}</Fragment>);
+  if (typeof text !== 'string' || !text.trim()) return [];
+  return splitContent(text).map((block, index) => 'steps' in block
+    ? <FlowDiagram key={`flow-${index}`} steps={block.steps} />
+    : <Markdown key={`markdown-${index}`}>{block.markdown}</Markdown>);
 }

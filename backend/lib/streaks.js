@@ -64,7 +64,7 @@ function getStreakSnapshot(user, now = new Date()) {
 async function recordStreakActivity(userId, now = new Date()) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const user = await User.findById(userId)
-      .select('timezone currentStreak longestStreak lastActivityDate activityDates');
+      .select('timezone currentStreak longestStreak lastActivityDate activityDates stats.totalStudyDays');
     if (!user) throw new Error('User not found');
 
     const today = dateKeyInTimezone(now, user.timezone);
@@ -92,8 +92,9 @@ async function recordStreakActivity(userId, now = new Date()) {
         currentStreak,
         longestStreak: Math.max(user.longestStreak || 0, currentStreak),
         activityDates,
+        'stats.totalStudyDays': (user.stats?.totalStudyDays || user.activityDates?.length || 0) + 1,
       },
-    }, { new: true }).select('timezone currentStreak longestStreak lastActivityDate activityDates');
+    }, { new: true }).select('timezone currentStreak longestStreak lastActivityDate activityDates stats.totalStudyDays');
     if (updated) return getStreakSnapshot(updated, now);
   }
 

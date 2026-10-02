@@ -190,7 +190,7 @@ async function* callAIStream(options = {}, { signal, onComplete } = {}) {
 }
 
 async function* streamText(options, { signal, onComplete } = {}) {
-  const response = await requestGemini(options, { stream: true, signal });
+  const response = await requestGemini(options, { stream: true, signal, model: options.model || getModel() });
   if (!response.body) throw new Error('Gemini returned an empty stream. Please try again.');
   const reader = response.body.getReader();
   const decoder = new TextDecoder();

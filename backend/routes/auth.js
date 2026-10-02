@@ -67,8 +67,12 @@ router.post('/google', async (req, res) => {
       user = await User.create({
         name: (payload.name || email.split('@')[0]).slice(0, 60),
         email,
+        emailVerified: true,
         password: crypto.randomBytes(24).toString('hex'),
       });
+    } else if (user.emailVerified !== true) {
+      user.emailVerified = true;
+      await user.save();
     }
 
     res.json({ token: sign(user._id), user: user.toPublic() });

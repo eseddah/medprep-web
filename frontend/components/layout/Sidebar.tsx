@@ -1,9 +1,11 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
+import api from '@/lib/api';
 import clsx from 'clsx';
-import { BookOpen, BookOpenCheck, Brain, CreditCard, GraduationCap, Info, Layers, MessageCircle, RotateCcw, Settings, Sparkles } from 'lucide-react';
+import { BookOpen, BookOpenCheck, Brain, CreditCard, GraduationCap, Info, Layers, MessageCircle, RotateCcw, Settings, ShieldCheck, Sparkles } from 'lucide-react';
 
 const NAV = [
   { href: '/courses',    icon: GraduationCap, label: 'Courses', color: '#176d82' },
@@ -22,8 +24,20 @@ const NAV = [
 export default function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
   const user = useStore(s => s.user);
+  const [isAdmin, setIsAdmin] = useState(false);
   const isPro = ['pro','annual'].includes(user?.plan || '');
   const initials = user?.name?.split(' ').map((w:string) => w[0]).join('').slice(0,2).toUpperCase() || '?';
+
+  useEffect(() => {
+    if (!user?._id) { setIsAdmin(false); return; }
+    let active = true;
+    api.get('/admin/access')
+      .then(() => { if (active) setIsAdmin(true); })
+      .catch(() => { if (active) setIsAdmin(false); });
+    return () => { active = false; };
+  }, [user?._id]);
+
+  const navItems = isAdmin ? [...NAV, { href: '/admin', icon: ShieldCheck, label: 'Admin', color: '#176d82' }] : NAV;
 
   return (
     <aside className={clsx('fixed inset-y-0 left-0 z-50 w-[280px] bg-surface border-r border-border flex flex-col h-dvh overflow-y-auto transition-transform md:sticky md:top-0 md:z-auto md:w-[230px] md:min-w-[230px] md:translate-x-0 md:transition-none', open ? 'translate-x-0' : '-translate-x-full')} aria-label="Main navigation">
@@ -43,7 +57,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
 
       {/* Nav */}
       <nav className="flex-1 p-2.5">
-        {NAV.map(n => {
+        {navItems.map(n => {
           const active = pathname.startsWith(n.href);
           const Icon = n.icon;
           return (
