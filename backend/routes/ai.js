@@ -5,6 +5,7 @@ const Progress = require('../models/Progress');
 const COURSES = require('../lib/coursesData');
 const { reserveDailyConcept, releaseDailyConcept, FREE_DAILY_CONCEPT_LIMIT } = require('../lib/studyActivity');
 const { callAI, callAIStream, isConfigured, parseJsonText } = require('../lib/gemini');
+const { cacheGeneration, getCachedGeneration } = require('../lib/aiCache');
 
 const AI_SETUP_ERROR = 'AI generation is not configured. Add GEMINI_API_KEY to the backend environment and restart the API.';
 
@@ -32,18 +33,22 @@ Make questions clinically accurate, high-yield, and exam-relevant.`;
   const userMsg = material
     ? `Study material:\n${material.slice(0, 8000)}`
     : `Generate questions about: ${topic}. Use standard medical curriculum content.`;
+  const generationOptions = { system, prompt: userMsg, maxOutputTokens: 24000 };
 
   try {
-    const raw = await callAI({ system, prompt: userMsg, maxOutputTokens: 24000 });
+    let raw = await getCachedGeneration('quiz', generationOptions);
+    if (!raw) raw = await callAI(generationOptions);
     const questions = parseJsonText(raw);
     if (!Array.isArray(questions) || !questions.length) throw new Error('Gemini returned no quiz questions. Please try again.');
+    await cacheGeneration('quiz', generationOptions, raw);
 
     // Track stats
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'stats.quizzesCompleted': 1 } });
 
     res.json({ questions, count: questions.length, plan, maxAllowed: maxQ });
   } catch (e) {
-    res.status(e.status || 500).json({ error: 'Failed to generate quiz: ' + e.message });
+    const exhausted = e.code === 'AI_UNAVAILABLE';
+    res.status(exhausted ? 503 : e.status || 500).json({ error: exhausted ? e.message : 'Failed to generate quiz: ' + e.message });
   }
 });
 
@@ -74,7 +79,8 @@ Return ONLY valid JSON array:
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'stats.flashcardsStudied': cards.length } });
     res.json({ cards, count: cards.length, plan, maxAllowed: maxF });
   } catch (e) {
-    res.status(e.status || 500).json({ error: 'Failed to generate flashcards: ' + e.message });
+    const exhausted = e.code === 'AI_UNAVAILABLE';
+    res.status(exhausted ? 503 : e.status || 500).json({ error: exhausted ? e.message : 'Failed to generate flashcards: ' + e.message });
   }
 });
 
@@ -118,17 +124,26 @@ Use Markdown tables for comparisons and fenced text blocks for at least one labe
     : material
       ? `Study material:\n${material.slice(0, 8000)}`
       : `Teach me about: ${topic}. Use standard medical/premed curriculum.`;
+  const generationOptions = { system, prompt: userMsg, maxOutputTokens: 8000 };
+  const shouldCacheLesson = Boolean(topic && !material && !previousContent);
 
   try {
     let reachedTokenLimit = false;
-    for await (const text of callAIStream({ system, prompt: userMsg, maxOutputTokens: 8000 }, {
-      signal: abortController.signal,
-      onComplete: interaction => {
-        reachedTokenLimit = (interaction.usage?.total_output_tokens || 0) >= 7900;
-      },
-    })) {
-      if (abortController.signal.aborted) break;
-      res.write(`data: ${JSON.stringify({ text })}\n\n`);
+    let lessonText = shouldCacheLesson ? await getCachedGeneration('lesson', generationOptions) : null;
+    if (lessonText) {
+      res.write(`data: ${JSON.stringify({ text: lessonText })}\n\n`);
+    } else {
+      lessonText = '';
+      for await (const text of callAIStream(generationOptions, {
+        signal: abortController.signal,
+        onComplete: interaction => {
+          reachedTokenLimit = (interaction.usage?.total_output_tokens || 0) >= 7900;
+        },
+      })) {
+        if (abortController.signal.aborted) break;
+        lessonText += text;
+        res.write(`data: ${JSON.stringify({ text })}\n\n`);
+      }
     }
 
     if (abortController.signal.aborted) {
@@ -137,6 +152,9 @@ Use Markdown tables for comparisons and fenced text blocks for at least one labe
     }
 
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'stats.lessonsGenerated': 1 } });
+    if (shouldCacheLesson && lessonText && !reachedTokenLimit) {
+      await cacheGeneration('lesson', generationOptions, lessonText);
+    }
     if (reachedTokenLimit) {
       res.write(`data: ${JSON.stringify({ incomplete: true })}\n\n`);
     }
@@ -147,7 +165,8 @@ Use Markdown tables for comparisons and fenced text blocks for at least one labe
     if (abortController.signal.aborted) return;
     console.error('Lesson generation failed:', e.message);
     if (!res.writableEnded) {
-      res.write(`data: ${JSON.stringify({ error: 'Lesson generation failed. Please retry in a moment.' })}\n\n`);
+      const message = e.code === 'AI_UNAVAILABLE' ? e.message : 'Lesson generation failed. Please retry in a moment.';
+      res.write(`data: ${JSON.stringify({ error: message })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
     }
@@ -177,7 +196,8 @@ router.post('/tutor', protect, requirePro, async (req, res) => {
     });
     res.json({ message });
   } catch (error) {
-    res.status(502).json({ error: 'The tutor is temporarily unavailable. Please try again.' });
+    const exhausted = error.code === 'AI_UNAVAILABLE';
+    res.status(exhausted ? 503 : 502).json({ error: exhausted ? error.message : 'The tutor is temporarily unavailable. Please try again.' });
   }
 });
 
@@ -202,8 +222,9 @@ router.post('/case', protect, async (req, res) => {
       return res.status(502).json({ error: 'The case did not meet the expected format. Please generate another.' });
     }
     res.json({ caseStudy, course: course.title, topic, track: track.toLowerCase() });
-  } catch {
-    res.status(502).json({ error: 'Could not generate this case. Please try again.' });
+  } catch (error) {
+    const exhausted = error.code === 'AI_UNAVAILABLE';
+    res.status(exhausted ? 503 : 502).json({ error: exhausted ? error.message : 'Could not generate this case. Please try again.' });
   }
 });
 

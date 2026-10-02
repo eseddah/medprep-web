@@ -1,12 +1,9 @@
-const { Anthropic } = require('@anthropic-ai/sdk');
-
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
-const AI_MODELS = {
-  primary: 'gemini-2.5-flash',
-  fallback: 'gemini-2.0-flash',
-  anthropic: 'claude-sonnet-4-20250514',
-};
-const DEFAULT_MODEL = AI_MODELS.primary;
+const AI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];
+const DEFAULT_MODEL = AI_MODELS[0];
+const MAX_ATTEMPTS = 5;
+const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
+const FRIENDLY_ERROR = 'AI generation is temporarily unavailable. Please try again in a moment.';
 
 function isConfigured() {
   const key = process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim() || '';
@@ -18,20 +15,36 @@ function getApiKey() {
 }
 
 function getModel() {
-  return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+  return DEFAULT_MODEL;
 }
 
 function getGeminiModels() {
-  const envModel = process.env.GEMINI_MODEL?.trim();
-  const models = [];
-  if (envModel) models.push(envModel);
-  models.push(AI_MODELS.primary, AI_MODELS.fallback);
-  return Array.from(new Set(models.filter(Boolean)));
+  return [...new Set(AI_MODELS.filter(Boolean))];
 }
 
 function shouldRetryAiError(error) {
   const text = `${error?.code || ''} ${error?.message || ''}`.toLowerCase();
-  return /(429|503|overloaded|high demand|resource exhausted|rate limit|temporarily unavailable|too many requests)/i.test(text);
+  return error?.status === 429
+    || error?.status === 503
+    || /(429|503|overloaded|high demand|timeout|timed out|etimedout|deadline exceeded)/i.test(text);
+}
+
+function isModelNotFound(error) {
+  return error?.status === 404
+    || /not[_\s-]?found/i.test(error?.code || '')
+    || /model[^\n]*not found|not found[^\n]*model/i.test(error?.message || '');
+}
+
+function logGeminiFailure(error, model, attempt) {
+  console.error(`[Gemini] request failed status=${error?.status ?? 'unknown'} model=${model} attempt=${attempt}/${MAX_ATTEMPTS}: ${error?.message || 'Unknown error'}`);
+}
+
+function finalAiError(cause) {
+  const error = new Error(FRIENDLY_ERROR);
+  error.code = 'AI_UNAVAILABLE';
+  error.status = 503;
+  error.cause = cause;
+  return error;
 }
 
 function sleep(ms) {
@@ -96,8 +109,11 @@ async function requestGemini(options, { stream = false, signal, model } = {}) {
     });
   } catch (error) {
     if (signal?.aborted) throw error;
-    const unavailable = new Error('Gemini could not be reached. Check the API connection and try again.');
-    unavailable.code = 'GEMINI_UNAVAILABLE';
+    const timedOut = error?.name === 'TimeoutError' || error?.code === 'ETIMEDOUT' || /timed out|timeout/i.test(error?.message || '');
+    const unavailable = new Error(error?.message || 'Gemini could not be reached.');
+    unavailable.code = timedOut ? 'GEMINI_TIMEOUT' : 'GEMINI_UNAVAILABLE';
+    unavailable.status = error?.status;
+    unavailable.cause = error;
     throw unavailable;
   }
 
@@ -122,60 +138,26 @@ async function generateText(options = {}) {
   return text;
 }
 
-async function generateAnthropicText(options = {}) {
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error('Anthropic is not configured.');
-  }
-
-  const anthropic = new Anthropic({ apiKey });
-  const response = await anthropic.messages.create({
-    model: AI_MODELS.anthropic,
-    max_tokens: options.maxOutputTokens || 4000,
-    system: options.system || 'You are a careful medical educator.',
-    messages: [{ role: 'user', content: options.prompt || '' }],
-  });
-
-  const text = (response.content || [])
-    .filter(part => part.type === 'text')
-    .map(part => part.text)
-    .join('\n')
-    .trim();
-
-  if (!text) {
-    throw new Error('Anthropic returned an empty response.');
-  }
-
-  return text;
-}
-
 async function callAI(options = {}) {
   const models = getGeminiModels();
   let lastError;
 
   for (const model of models) {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       try {
         return await generateText({ ...options, model });
       } catch (error) {
         lastError = error;
-        if (!shouldRetryAiError(error) || attempt === 2) break;
-        await sleep(500 * (attempt + 1));
+        logGeminiFailure(error, model, attempt);
+        if (error?.code === 'GEMINI_NOT_CONFIGURED') throw error;
+        if (isModelNotFound(error) || !shouldRetryAiError(error) || attempt === MAX_ATTEMPTS) break;
+        const delay = RETRY_DELAYS_MS[attempt - 1] + Math.floor(Math.random() * 251);
+        await sleep(delay);
       }
     }
   }
 
-  if (process.env.ANTHROPIC_API_KEY?.trim()) {
-    try {
-      return await generateAnthropicText(options);
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  const fallbackError = new Error('AI generation is temporarily unavailable. Please try again in a moment.');
-  fallbackError.cause = lastError;
-  throw fallbackError;
+  throw finalAiError(lastError);
 }
 
 async function* callAIStream(options = {}, { signal, onComplete } = {}) {
@@ -183,33 +165,28 @@ async function* callAIStream(options = {}, { signal, onComplete } = {}) {
   let lastError;
 
   for (const model of models) {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       try {
+        let generated = '';
         for await (const chunk of streamText({ ...options, model }, { signal, onComplete })) {
-          yield chunk;
+          generated += chunk;
         }
+        if (!generated.trim()) throw new Error('Gemini returned an empty response.');
+        yield generated;
         return;
       } catch (error) {
         lastError = error;
-        if (!shouldRetryAiError(error) || attempt === 2) break;
-        await sleep(500 * (attempt + 1));
+        if (signal?.aborted) throw error;
+        logGeminiFailure(error, model, attempt);
+        if (error?.code === 'GEMINI_NOT_CONFIGURED') throw error;
+        if (isModelNotFound(error) || !shouldRetryAiError(error) || attempt === MAX_ATTEMPTS) break;
+        const delay = RETRY_DELAYS_MS[attempt - 1] + Math.floor(Math.random() * 251);
+        await sleep(delay);
       }
     }
   }
 
-  if (process.env.ANTHROPIC_API_KEY?.trim()) {
-    try {
-      const text = await generateAnthropicText(options);
-      yield text;
-      return;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  const fallbackError = new Error('AI generation is temporarily unavailable. Please try again in a moment.');
-  fallbackError.cause = lastError;
-  throw fallbackError;
+  throw finalAiError(lastError);
 }
 
 async function* streamText(options, { signal, onComplete } = {}) {
@@ -227,7 +204,10 @@ async function* streamText(options, { signal, onComplete } = {}) {
     if (!data || data === '[DONE]') return;
     const event = JSON.parse(data);
     if (event.event_type === 'error') {
-      throw new Error(event.error?.message || 'Gemini generation failed. Please retry.');
+      const error = new Error(event.error?.message || 'Gemini generation failed.');
+      error.status = event.error?.status || event.error?.code;
+      error.code = event.error?.code;
+      throw error;
     }
     if (event.event_type === 'step.delta' && event.delta?.type === 'text' && event.delta.text) {
       yield event.delta.text;
@@ -289,8 +269,8 @@ module.exports = {
   DEFAULT_MODEL,
   callAI,
   callAIStream,
-  generateAnthropicText,
   generateText,
+  getGeminiModels,
   getModel,
   isConfigured,
   parseJsonText,

@@ -173,8 +173,9 @@ router.post('/:id/explain', protect, async (req, res) => {
       prompt: `Topic: ${item.topic}\nQuestion: ${item.prompt}\nOptions: ${item.options.map((option, index) => `${index + 1}. ${option}`).join('\n')}\nCorrect answer: ${item.options[item.correctIndex] || item.answer}\nStored explanation: ${item.explanation || 'None'}`,
     });
     res.json({ explanation });
-  } catch {
-    res.status(502).json({ error: 'Could not explain this question right now' });
+  } catch (error) {
+    const exhausted = error.code === 'AI_UNAVAILABLE';
+    res.status(exhausted ? 503 : 502).json({ error: exhausted ? error.message : 'Could not explain this question right now' });
   }
 });
 
