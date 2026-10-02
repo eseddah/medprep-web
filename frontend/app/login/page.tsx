@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { login } from '@/lib/auth';
+import { getPostAuthPath, login } from '@/lib/auth';
 import { useStore } from '@/lib/store';
 import toast from 'react-hot-toast';
 import Input from '@/components/ui/Input';
@@ -23,7 +23,7 @@ export default function LoginPage() {
       const { user } = await login(form.email, form.password);
       setUser(user);
       toast.success(`Welcome back, ${user.name}!`);
-      router.push('/courses');
+      router.push(getPostAuthPath());
     } catch (err: any) {
       toast.error(err.response?.data?.error || (err.code === 'ERR_NETWORK' ? 'Unable to reach the server. Check your connection and try again.' : 'Login failed. Please check your details and try again.'));
     } finally { setLoading(false); }

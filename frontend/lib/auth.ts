@@ -36,6 +36,15 @@ export const googleLogin = async (credential: string) => {
   return data;
 };
 
+export const getPostAuthPath = () => {
+  const referral = typeof window === 'undefined'
+    ? ''
+    : (new URLSearchParams(window.location.search).get('referral') || localStorage.getItem('medprep_pending_referral') || '').trim().toUpperCase();
+  return /^[A-Z0-9_-]{4,32}$/.test(referral)
+    ? `/billing?referral=${encodeURIComponent(referral)}`
+    : '/courses';
+};
+
 export const logout = () => {
   localStorage.removeItem('medprep_token');
   localStorage.removeItem('medprep_user');

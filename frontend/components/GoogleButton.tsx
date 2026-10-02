@@ -2,7 +2,7 @@
 import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { googleLogin } from '@/lib/auth';
+import { getPostAuthPath, googleLogin } from '@/lib/auth';
 import { useStore } from '@/lib/store';
 
 export default function GoogleButton() {
@@ -21,7 +21,7 @@ export default function GoogleButton() {
               const { user } = await googleLogin(res.credential as string);
               setUser(user);
               toast.success(`Welcome, ${user.name}!`);
-              router.push('/courses');
+              router.push(getPostAuthPath());
             } catch (err: any) {
               toast.error(err.response?.data?.error || 'Google sign-in failed');
             }

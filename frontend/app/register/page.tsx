@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { register } from '@/lib/auth';
+import { getPostAuthPath, register } from '@/lib/auth';
 import { useStore } from '@/lib/store';
 import toast from 'react-hot-toast';
 import Input from '@/components/ui/Input';
@@ -25,7 +25,7 @@ export default function RegisterPage() {
       const { user } = await register(form);
       setUser(user);
       toast.success('Account created! Welcome to MedPrep 🎉');
-      router.push('/courses');
+      router.push(getPostAuthPath());
     } catch (err: any) {
       toast.error(err.response?.data?.error || (err.code === 'ERR_NETWORK' ? 'Unable to reach the server. Check your connection and try again.' : 'Registration failed. Please try again.'));
     } finally { setLoading(false); }

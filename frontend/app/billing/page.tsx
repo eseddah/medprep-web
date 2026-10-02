@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button';
 import { useStore } from '@/lib/store';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { Copy } from 'lucide-react';
+import { Copy, Link2 } from 'lucide-react';
 
 type Cycle = 'monthly' | 'annual';
 
@@ -29,6 +29,9 @@ function BillingContent() {
   const [discount, setDiscount] = useState<{ code: string; percentOff: number; amount: number; planType: string } | null>(null);
   const [validatingCode, setValidatingCode] = useState(false);
   const [referral, setReferral] = useState<{ code: string; percentOff: number; expiresAt: string; usesRemaining: number; rewardDays: number } | null>(null);
+  const [referralLink, setReferralLink] = useState('');
+  const referralFromLink = (searchParams.get('referral') || '').trim().toUpperCase();
+  const selectedPlanType = cycle === 'annual' ? 'pro_annual' : 'pro_monthly';
 
   useEffect(() => {
     // Handle return from Paystack
@@ -45,7 +48,39 @@ function BillingContent() {
     api.get('/billing/referral').then(({ data }) => setReferral(data)).catch(() => {});
   }, []);
 
-  const selectedPlanType = cycle === 'annual' ? 'pro_annual' : 'pro_monthly';
+  useEffect(() => {
+    if (!referralFromLink) return;
+    localStorage.setItem('medprep_pending_referral', referralFromLink);
+  }, [referralFromLink]);
+
+  useEffect(() => {
+    const code = referralFromLink || localStorage.getItem('medprep_pending_referral') || '';
+    if (!code) return;
+    let active = true;
+    setCodeInput(code);
+    setValidatingCode(true);
+    api.post('/billing/codes/validate', { code, planType: selectedPlanType })
+      .then(({ data }) => {
+        if (!active) return;
+        setDiscount({ ...data, planType: selectedPlanType });
+        setCodeInput(data.code);
+        if (localStorage.getItem('medprep_pending_referral') === data.code) localStorage.removeItem('medprep_pending_referral');
+      })
+      .catch(error => {
+        if (!active) return;
+        setDiscount(null);
+        toast.error(error.response?.data?.error || 'Could not validate this referral link');
+      })
+      .finally(() => { if (active) setValidatingCode(false); });
+    return () => { active = false; };
+  }, [referralFromLink, selectedPlanType]);
+
+  useEffect(() => {
+    if (!referral) return;
+    const url = new URL('/billing', window.location.origin);
+    url.searchParams.set('referral', referral.code);
+    setReferralLink(url.toString());
+  }, [referral]);
 
   const applyDiscount = async () => {
     if (!codeInput.trim()) return;
@@ -70,6 +105,16 @@ function BillingContent() {
       toast.success('Referral code copied');
     } catch {
       toast.error(`Referral code: ${referral.code}`);
+    }
+  };
+
+  const copyReferralLink = async () => {
+    if (!referralLink) return;
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      toast.success('Referral link copied');
+    } catch {
+      toast.error('Could not copy referral link');
     }
   };
 
@@ -183,6 +228,10 @@ function BillingContent() {
             <code className="rounded-md border border-border bg-surface2 px-3 py-2 text-[12px] font-semibold text-text">{referral.code}</code>
             <button type="button" onClick={copyReferral} aria-label="Copy referral code" title="Copy referral code" className="rounded-md border border-border2 bg-surface p-2 text-text2 hover:border-accent hover:text-accent"><Copy size={15} aria-hidden="true" /></button>
           </div>
+        </div>
+        <div className="mt-4 flex min-w-0 gap-2">
+          <input aria-label="Referral link" readOnly value={referralLink} placeholder="Preparing referral link…" className="min-w-0 flex-1 rounded-md border border-border2 bg-surface2 px-3 py-2 text-[11px] text-text2" />
+          <button type="button" onClick={copyReferralLink} disabled={!referralLink} aria-label="Copy referral link" title="Copy referral link" className="shrink-0 rounded-md border border-border2 bg-surface p-2 text-text2 hover:border-accent hover:text-accent disabled:opacity-50"><Link2 size={16} aria-hidden="true" /></button>
         </div>
       </section>}
 

@@ -15,7 +15,12 @@ export default function DashboardLayout({ children, title, sub }: { children: Re
 
   useEffect(() => {
     const stored = getStoredUser();
-    if (!stored) { router.push('/login'); return; }
+    if (!stored) {
+      const referral = new URLSearchParams(window.location.search).get('referral')?.trim().toUpperCase() || '';
+      if (/^[A-Z0-9_-]{4,32}$/.test(referral)) localStorage.setItem('medprep_pending_referral', referral);
+      router.push(referral ? `/login?referral=${encodeURIComponent(referral)}` : '/login');
+      return;
+    }
     setUser(stored);
   }, []);
 
