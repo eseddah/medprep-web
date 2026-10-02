@@ -6,6 +6,7 @@ const ChatMessage = require('../models/ChatMessage');
 const ChatRoom = require('../models/ChatRoom');
 const ReviewItem = require('../models/ReviewItem');
 const TopicMastery = require('../models/TopicMastery');
+const StudyHistory = require('../models/StudyHistory');
 const { sendEmailNotificationsEnabled } = require('../lib/email');
 
 // GET /api/users/stats
@@ -124,6 +125,7 @@ router.delete('/account', protect, async (req, res) => {
     Progress.deleteMany({ user: req.user._id }),
     ReviewItem.deleteMany({ user: req.user._id }),
     TopicMastery.deleteMany({ user: req.user._id }),
+    StudyHistory.deleteMany({ user: req.user._id }),
   ]);
   await ChatMessage.deleteMany({ sender: req.user._id });
   const ownedRooms = await ChatRoom.find({ createdBy: req.user._id }).select('_id');

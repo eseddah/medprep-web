@@ -12,6 +12,8 @@ import { notFound } from 'next/navigation';
 import { formatLesson } from '@/lib/lessonContent';
 import { consumeLessonStream } from '@/lib/streamLesson';
 import { recordStreakActivity } from '@/lib/streak';
+import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
+import { saveStudyHistory, type StudyHistoryEntry } from '@/lib/studyHistory';
 import { Pause, Play } from 'lucide-react';
 
 const NIH3D_ENTRY = 'https://3d.nih.gov/entries/3DPX-021858';
@@ -77,6 +79,7 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
       }
       try { await api.post('/ai/save-progress', { courseId: course.id, topic, type: 'lesson' }); }
       catch { toast.error('Lesson ready, but course progress did not sync'); }
+      await saveStudyHistory({ section: 'course-lesson', title: topic, prompt: `${course.title}: ${topic}`, response: full });
       void recordStreakActivity().catch(() => toast.error('Lesson finished, but your streak could not be updated.'));
       await refreshLessonUsage();
     } catch (error: any) {
@@ -94,6 +97,14 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
   const pauseLesson = () => {
     setPaused(true);
     abortController.current?.abort();
+  };
+
+  const restoreLesson = (entry: StudyHistoryEntry) => {
+    setActiveTopic(entry.title);
+    setContent(entry.response);
+    setLessonError('');
+    setPaused(false);
+    setStreaming(false);
   };
 
   return (
@@ -193,6 +204,7 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
           )}
         </div>
       </div>
+      <div className="mt-6"><StudyHistoryPanel section="course-lesson" onRestore={restoreLesson} /></div>
     </DashboardLayout>
   );
 }

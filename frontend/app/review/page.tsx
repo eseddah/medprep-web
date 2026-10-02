@@ -8,6 +8,8 @@ import Spinner from '@/components/ui/Spinner';
 import api from '@/lib/api';
 import { recordStreakActivity } from '@/lib/streak';
 import toast from 'react-hot-toast';
+import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
+import { saveStudyHistory, type StudyHistoryEntry } from '@/lib/studyHistory';
 
 type ReviewItem = {
   id: string;
@@ -87,12 +89,16 @@ export default function ReviewPage() {
     try {
       const { data } = await api.post(`/review/${current.id}/explain`);
       setAiExplanation(data.explanation || 'No explanation was returned.');
+      const explanation = data.explanation || 'No explanation was returned.';
+      await saveStudyHistory({ section: 'review', title: `${current.topic}: ${current.prompt}`.slice(0, 180), prompt: current.prompt.slice(0, 2000), response: explanation });
     } catch (explainError: any) {
       setAiExplanation(current.explanation || explainError.response?.data?.error || 'An explanation is unavailable right now.');
     } finally {
       setExplaining(false);
     }
   };
+
+  const restoreExplanation = (entry: StudyHistoryEntry) => setAiExplanation(entry.response);
 
   return (
     <DashboardLayout title="Smart Review" sub="A short daily review keeps important ideas within reach">
@@ -151,6 +157,7 @@ export default function ReviewPage() {
                   </button>)}
                 </div>}
               </Card>}
+              <StudyHistoryPanel section="review" onRestore={restoreExplanation} />
       </div>
     </DashboardLayout>
   );

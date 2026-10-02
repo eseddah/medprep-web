@@ -10,6 +10,8 @@ import { BookOpen, LockKeyhole, Send } from 'lucide-react';
 import Link from 'next/link';
 import { formatLesson } from '@/lib/lessonContent';
 import toast from 'react-hot-toast';
+import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
+import { parseStudyResponse, saveStudyHistory, type StudyHistoryEntry } from '@/lib/studyHistory';
 
 type TutorMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -38,7 +40,10 @@ export default function TutorPage() {
         context: `${selectedCourse.title}: ${topic}`,
         messages: nextMessages.slice(-16),
       });
-      setMessages(previous => [...previous, { role: 'assistant', content: data.message }]);
+      const assistantMessage = { role: 'assistant' as const, content: data.message };
+      const turn = [...nextMessages, assistantMessage];
+      setMessages(turn);
+      await saveStudyHistory({ section: 'tutor', title: question.slice(0, 180), prompt: question, response: JSON.stringify(turn.slice(-16)) });
     } catch (error: any) {
       setMessages(previous => previous.slice(0, -1));
       setDraft(question);
@@ -46,6 +51,15 @@ export default function TutorPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const restoreConversation = (entry: StudyHistoryEntry) => {
+    const saved = parseStudyResponse<TutorMessage[]>(entry);
+    if (!saved?.length || saved.some(message => !['user', 'assistant'].includes(message.role) || typeof message.content !== 'string')) {
+      toast.error('This tutor history item could not be restored');
+      return;
+    }
+    setMessages(saved);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -105,6 +119,7 @@ export default function TutorPage() {
           </section>
         </div>
       )}
+      <StudyHistoryPanel section="tutor" onRestore={restoreConversation} />
     </DashboardLayout>
   );
 }

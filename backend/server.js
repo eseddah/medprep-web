@@ -213,6 +213,7 @@ app.use('/api/streak',   require('./routes/streak'));
 app.use('/api/review',   require('./routes/review'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/admin',    require('./routes/admin'));
+app.use('/api/history',  require('./routes/history'));
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok', ts: new Date() }));
 

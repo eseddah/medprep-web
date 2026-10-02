@@ -10,6 +10,8 @@ import { recordStreakActivity } from '@/lib/streak';
 import { getStudyTopicContext } from '@/lib/studyTopics';
 import toast from 'react-hot-toast';
 import Spinner from '@/components/ui/Spinner';
+import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
+import { parseStudyResponse, saveStudyHistory } from '@/lib/studyHistory';
 
 interface Question { question:string; options:string[]; correct:number; explanation:string; topic?:string; }
 type Phase = 'setup'|'questions'|'results';
@@ -52,8 +54,20 @@ export default function QuizPage() {
       const { data } = await api.post('/ai/quiz', { topic, material, count, difficulty: diff, type });
       setQuestions(data.questions);
       setAnswered({}); setScore(0); setPhase('questions');
+      const historyLabel = topic.trim() || files.map(file => file.name).join(', ') || 'Quiz';
+      await saveStudyHistory({ section: 'quiz', title: historyLabel, prompt: historyLabel, response: JSON.stringify(data.questions) });
     } catch (e:any) { toast.error(e.response?.data?.error || 'Failed to generate quiz'); }
     setLoading(false);
+  };
+
+  const restoreQuiz = (entry: Parameters<typeof parseStudyResponse<Question[]>>[0]) => {
+    const savedQuestions = parseStudyResponse<Question[]>(entry);
+    if (!savedQuestions?.length) { toast.error('This quiz history item could not be restored'); return; }
+    setTopic(entry.title);
+    setQuestions(savedQuestions);
+    setAnswered({});
+    setScore(0);
+    setPhase('questions');
   };
 
   const answer = (qi: number, oi: number) => {
@@ -204,6 +218,7 @@ export default function QuizPage() {
           })}
         </div>
       )}
+      <div className="max-w-3xl"><StudyHistoryPanel section="quiz" onRestore={restoreQuiz} /></div>
     </DashboardLayout>
   );
 }

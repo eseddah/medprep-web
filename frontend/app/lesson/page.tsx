@@ -12,6 +12,8 @@ import { consumeLessonStream } from '@/lib/streamLesson';
 import { useStore } from '@/lib/store';
 import api from '@/lib/api';
 import { recordStreakActivity } from '@/lib/streak';
+import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
+import { saveStudyHistory, type StudyHistoryEntry } from '@/lib/studyHistory';
 import Link from 'next/link';
 import { Pause, Play } from 'lucide-react';
 
@@ -69,6 +71,8 @@ export default function LessonPage() {
         await refreshLessonUsage();
         return;
       }
+      const historyLabel = topic.trim() || `Uploaded material: ${files.map(file => file.name).join(', ')}`;
+      await saveStudyHistory({ section: 'lesson', title: historyLabel, prompt: historyLabel, response: full });
       void recordStreakActivity().catch(() => toast.error('Lesson finished, but your streak could not be updated.'));
       await refreshLessonUsage();
     } catch(error: any){
@@ -87,6 +91,14 @@ export default function LessonPage() {
   const pauseGeneration = () => {
     setPaused(true);
     abortController.current?.abort();
+  };
+
+  const restoreLesson = (entry: StudyHistoryEntry) => {
+    setTopic(entry.title);
+    setContent(entry.response);
+    setGenerationError('');
+    setPaused(false);
+    setStreaming(false);
   };
 
   if (!streaming && !content) return (
@@ -128,6 +140,7 @@ export default function LessonPage() {
         </div>}
         <Button variant="primary" onClick={generate}>📖 Generate Lesson</Button>
         {generationError && <p role="alert" className="mt-3 text-[13px] text-red">{generationError}</p>}
+        <StudyHistoryPanel section="lesson" onRestore={restoreLesson} />
       </div>
     </DashboardLayout>
   );
@@ -148,6 +161,7 @@ export default function LessonPage() {
           {generationError && <div role="alert" className="mt-4 rounded-lg border border-red/40 bg-red/10 p-4 text-[13px] text-red">{generationError}</div>}
           {streaming&&<span className="inline-block w-2 h-3.5 ml-0.5 align-middle" style={{background:'var(--accent)',animation:'blink .8s step-end infinite'}}/>}
         </Card>
+        <StudyHistoryPanel section="lesson" onRestore={restoreLesson} />
       </div>
     </DashboardLayout>
   );

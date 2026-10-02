@@ -9,6 +9,8 @@ import { COURSES, Course } from '@/lib/courses';
 import { formatInline, formatLesson } from '@/lib/lessonContent';
 import api from '@/lib/api';
 import { recordStreakActivity } from '@/lib/streak';
+import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
+import { parseStudyResponse, saveStudyHistory, type StudyHistoryEntry } from '@/lib/studyHistory';
 import toast from 'react-hot-toast';
 
 type CaseStep = { prompt: string; options: string[]; correctIndex: number; explanation: string };
@@ -49,11 +51,25 @@ export default function CasesPage() {
       setStepIndex(0);
       setChoice(null);
       setRevealed(false);
+      const title = `${track} · ${course.title} · ${topic}`;
+      await saveStudyHistory({ section: 'case', title, prompt: title, response: JSON.stringify({ caseStudy: data.caseStudy, track, courseId: course.id, topic }) });
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Could not generate this case');
     } finally {
       setLoading(false);
     }
+  };
+
+  const restoreCase = (entry: StudyHistoryEntry) => {
+    const saved = parseStudyResponse<{ caseStudy: CaseStudy; track: 'Medical' | 'Premed'; courseId: string; topic: string }>(entry);
+    if (!saved?.caseStudy?.steps?.length) { toast.error('This case history item could not be restored'); return; }
+    setTrack(saved.track);
+    setCourseId(saved.courseId);
+    setTopic(saved.topic);
+    setCaseStudy(saved.caseStudy);
+    setStepIndex(0);
+    setChoice(null);
+    setRevealed(false);
   };
 
   const continueCase = () => {
@@ -163,6 +179,7 @@ export default function CasesPage() {
           {caseStudy.illustration && <div className="text-[13px] leading-relaxed text-text2">{formatLesson(caseStudy.illustration)}</div>}
         </div>
       )}
+      <div className="max-w-4xl"><StudyHistoryPanel section="case" onRestore={restoreCase} /></div>
     </DashboardLayout>
   );
 }

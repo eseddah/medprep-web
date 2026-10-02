@@ -10,6 +10,8 @@ import api from '@/lib/api';
 import { recordStreakActivity } from '@/lib/streak';
 import { getStudyTopicContext } from '@/lib/studyTopics';
 import toast from 'react-hot-toast';
+import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
+import { parseStudyResponse, saveStudyHistory } from '@/lib/studyHistory';
 
 interface FlashCard { front: string; back: string; }
 
@@ -40,8 +42,22 @@ export default function FlashcardsPage() {
       const { data } = await api.post('/ai/flashcards', { topic, material, count });
       setCards(data.cards); setCurrent(0); setFlipped(false); setKnown(new Set()); setSavedCards(new Set());
       setReviewRecorded(false);
+      const historyLabel = topic.trim() || files.map(file => file.name).join(', ') || 'Flashcards';
+      await saveStudyHistory({ section: 'flashcards', title: historyLabel, prompt: historyLabel, response: JSON.stringify(data.cards) });
     } catch (e:any) { toast.error(e.response?.data?.error || 'Failed'); }
     setLoading(false);
+  };
+
+  const restoreFlashcards = (entry: Parameters<typeof parseStudyResponse<FlashCard[]>>[0]) => {
+    const savedCards = parseStudyResponse<FlashCard[]>(entry);
+    if (!savedCards?.length) { toast.error('This flashcard history item could not be restored'); return; }
+    setTopic(entry.title);
+    setCards(savedCards);
+    setCurrent(0);
+    setFlipped(false);
+    setKnown(new Set());
+    setSavedCards(new Set());
+    setReviewRecorded(false);
   };
 
   const mark = (know: boolean) => {
@@ -102,6 +118,7 @@ export default function FlashcardsPage() {
         <Button variant="primary" onClick={generate} disabled={loading||(!files.length&&!topic)}>
           {loading?<><Spinner/>Generating {count} flashcards…</>:`⚡ Generate ${count} Flashcards`}
         </Button>
+        <StudyHistoryPanel section="flashcards" onRestore={restoreFlashcards} />
       </div>
     </DashboardLayout>
   );
@@ -144,6 +161,7 @@ export default function FlashcardsPage() {
           <span className="text-[13px] text-text3 w-16 text-center">{current+1} / {cards.length}</span>
           <Button disabled={current===cards.length-1} onClick={()=>{setCurrent(c=>c+1);setFlipped(false);}}>Next →</Button>
         </div>
+        <StudyHistoryPanel section="flashcards" onRestore={restoreFlashcards} />
       </div>
     </DashboardLayout>
   );
