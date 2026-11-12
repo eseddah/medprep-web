@@ -6,7 +6,7 @@ import Card from '@/components/ui/Card';
 import { COURSES } from '@/lib/courses';
 import { useStore } from '@/lib/store';
 import { isPro as hasProAccess } from '@/lib/auth';
-import CourseDiagram from '@/components/courses/CourseDiagram';
+import CourseArtwork from '@/components/courses/CourseArtwork';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import Spinner from '@/components/ui/Spinner';
@@ -16,6 +16,7 @@ import { consumeLessonStream } from '@/lib/streamLesson';
 import { recordStreakActivity } from '@/lib/streak';
 import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
 import { saveStudyHistory, type StudyHistoryEntry } from '@/lib/studyHistory';
+import TextToSpeech from '@/components/ui/TextToSpeech';
 import { Pause, Play } from 'lucide-react';
 
 const NIH3D_ENTRY = 'https://3d.nih.gov/entries/3DPX-021858';
@@ -113,12 +114,12 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
     <DashboardLayout title={course.title} sub={course.desc}>
       <Link href="/courses" className="text-[13px] text-text3 hover:text-text flex items-center gap-1.5 mb-5">← All courses</Link>
       <section className="relative overflow-hidden rounded-xl border border-border bg-surface mb-6 h-[190px] md:h-[230px]">
-        <div className="absolute inset-0"><CourseDiagram course={course} compact /></div>
+        <div className="absolute inset-0"><CourseArtwork course={course} priority imageClassName="object-[center_30%]" /></div>
         <div className="absolute inset-0" style={{background:'linear-gradient(90deg,rgba(18,38,33,.94),rgba(18,38,33,.72) 50%,rgba(18,38,33,.16))'}} />
         <div className="relative h-full flex flex-col justify-end p-5 md:p-7 text-white max-w-2xl">
-          <div className="text-[11px] uppercase tracking-wide text-white/75 mb-1">{course.cat} · {course.topics.length} learning modules</div>
-          <h2 className="font-dm-serif text-[27px] md:text-[34px] mb-1">{course.title}</h2>
-          <p className="text-[13px] leading-relaxed text-white/85">{course.desc}</p>
+          <div className="text-[12px] uppercase tracking-wide text-white/75 mb-1">{course.cat} · {course.topics.length} learning modules</div>
+          <h2 className="font-dm-serif text-[29px] md:text-[36px] mb-1">{course.title}</h2>
+          <p className="text-[15px] leading-relaxed text-white/85">{course.desc}</p>
         </div>
       </section>
       {!isPro && <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber/35 bg-amber/10 px-3.5 py-2.5 text-[12px] text-text2">
@@ -135,10 +136,6 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
                 <button key={t} onClick={()=>loadTopic(t)} className={`block w-full text-left px-3 py-2 rounded-lg text-[13px] mb-0.5 transition-all border-l-[3px] ${activeTopic===t?'bg-surface3 text-text font-medium':'text-text2 hover:bg-surface2 border-transparent'}`} style={{borderLeftColor:activeTopic===t?course.color:'transparent',fontFamily:'var(--font-outfit)'}}>{t}</button>
               ))}
             </div>
-          </Card>
-          <Card className="p-3">
-            <p className="px-1 text-[11px] text-text3 uppercase tracking-wide mb-2">Course concept map</p>
-            <CourseDiagram course={course} />
           </Card>
           <Card className="p-0 overflow-hidden">
             <div className="p-4 border-b border-border">
@@ -174,11 +171,11 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
             </Card>
           ) : !activeTopic ? (
             <Card className="text-center py-16">
-              <div className="mb-5 overflow-hidden rounded-lg max-h-64 border border-border bg-surface2">
-                <CourseDiagram course={course} />
+              <div className="mb-5 overflow-hidden rounded-lg border border-border bg-surface2">
+                <CourseArtwork course={course} className="h-56 max-h-64" />
               </div>
-              <h3 className="font-dm-serif text-[18px] text-text mb-2">Select a topic</h3>
-              <p className="text-[13px] text-text3">Choose any topic from the list to generate an AI-powered lesson.</p>
+              <h3 className="font-dm-serif text-[20px] text-text mb-2">Select a topic</h3>
+              <p className="text-[15px] text-text3">Choose a topic from the course outline to generate an AI-powered lesson.</p>
             </Card>
           ) : activeTopic && (
             <Card>
@@ -190,6 +187,7 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
                 <div className="flex items-center gap-2">
                   {streaming && <><span className="flex items-center gap-2 text-[12px] text-text2"><Spinner size={13} color="var(--accent)"/>Generating…</span><button type="button" onClick={pauseLesson} className="inline-flex items-center gap-1 rounded-md border border-border2 px-2 py-1 text-[11px] font-medium text-text2 hover:border-accent"><Pause size={13}/>Pause</button></>}
                   {paused && <><span className="text-[12px] text-amber">Paused · partial lesson saved</span><button type="button" onClick={() => activeTopic && loadTopic(activeTopic, content)} className="inline-flex items-center gap-1 rounded-md border border-accent px-2 py-1 text-[11px] font-semibold text-accent"><Play size={13}/>Resume</button></>}
+                  {!streaming && !paused && content && <TextToSpeech text={content} />}
                 </div>
               </div>
               <div className="leading-relaxed">

@@ -1,2 +1,5 @@
-import { redirect } from 'next/navigation';
-export default function Home() { redirect('/courses'); }
+import HomePage from '@/components/landing/HomePage';
+
+export default function Home() {
+  return <HomePage />;
+}

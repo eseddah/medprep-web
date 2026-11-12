@@ -49,7 +49,7 @@ export default function DashboardLayout({ children, title, sub }: { children: Re
   );
 
   return (
-    <div className="flex min-h-screen">
+    <div className="app-shell flex min-h-screen">
       {mobileNavOpen && <button type="button" aria-label="Close navigation menu" className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setMobileNavOpen(false)} />}
       <Sidebar open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <div className="flex-1 min-w-0 flex flex-col overflow-auto">

@@ -69,3 +69,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .katex { color: var(--text); font-size: 1em; }
 .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 0.25rem 0; }
+
+.animate-float { animation: float 7s ease-in-out infinite; }
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.trial-overlay { animation: overlay-in .18s ease-out both; }
+.trial-dialog { animation: dialog-in .22s ease-out both; }
+
+.app-shell [class~="text-[10px]"] { font-size: 0.75rem; }
+.app-shell [class~="text-[11px]"] { font-size: 0.8rem; }
+.app-shell [class~="text-[12px]"] { font-size: 0.875rem; }
+.app-shell [class~="text-[12.5px]"] { font-size: 0.875rem; }
+.app-shell [class~="text-[13px]"] { font-size: 0.9375rem; }
+.app-shell [class~="text-[13.5px]"] { font-size: 0.9375rem; }
+.app-shell [class~="text-[14px]"] { font-size: 1rem; }
+.app-shell [class~="text-[15px]"] { font-size: 1rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
