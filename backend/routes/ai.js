@@ -107,30 +107,32 @@ router.post('/lesson', protect, async (req, res) => {
   }
 
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
   const abortController = new AbortController();
   res.on('close', () => {
     if (!res.writableEnded) abortController.abort();
   });
 
-  const system = `You are a careful medical, science, and mathematics educator. Create a comprehensive ${depth || 'deep-dive'} lesson${topic ? ` on "${topic}"` : ''}.
-Teach for durable understanding, not a short summary. Assume the learner needs a self-contained chapter: establish prerequisites, define technical vocabulary, explain the normal model before exceptions, connect each mechanism step by step to its outcomes, and distinguish established facts from useful simplifications. Be detailed and specific to the requested topic; do not pad with unrelated facts or invent sources.
-${previousContent ? 'The learner paused an earlier generation. Continue from the supplied partial lesson without repeating it. Finish the interrupted section, then continue the remaining material.' : ''}
+  const system = `You are a careful medical, science, and mathematics educator. Create a complete, self-contained ${depth || 'deep-dive'} lesson${topic ? ` on "${topic}"` : ''}.
+Prioritize the requested topic and teach for durable understanding. Define technical vocabulary, explain mechanisms step by step, distinguish established facts from useful simplifications, and avoid generic or unrelated padding. Aim for about 1,200–1,800 words while fully covering the core concepts.
+${previousContent ? 'The learner supplied an existing lesson. Continue from its exact ending without repeating earlier material. Add important material that is still missing, such as a deeper mechanism, example, application, or review section.' : ''}
 Format:
 # Section Title
 ## Subsection
 > Clinical pearl / high-yield point
 - Bullet points
 Regular explanatory paragraphs.
-Use clean Markdown headings, paragraphs, bold text, numbered lists, bullet lists, and simple tables. For mathematical, chemical, or physical notation, use valid LaTeX with $...$ for inline expressions and $$...$$ for display equations; group multi-character superscripts and subscripts in braces, use conventional signs, and define unfamiliar symbols at first use. Never leave LaTeX delimiter commands visible. ${CLEAN_DIAGRAM_FORMAT} Include learning objectives, prerequisites, foundational concepts, detailed mechanisms, pathophysiology or derivations, a fully worked example, clinical or real-world relevance, common misconceptions, retrieval questions with answers, and exam tips. For calculations, show every step and units. For clinical topics, label scenarios as educational and never present them as personal medical advice.`;
+Use clean Markdown headings, paragraphs, bold text, numbered lists, bullet lists, and simple tables. For mathematical, chemical, or physical notation, use valid LaTeX with $...$ for inline expressions and $$...$$ for display equations; group multi-character superscripts and subscripts in braces, use conventional signs, and define unfamiliar symbols at first use. Never leave LaTeX delimiter commands visible. ${CLEAN_DIAGRAM_FORMAT} Include learning objectives, prerequisites, foundational concepts, mechanisms, a worked example, clinical or real-world relevance, common misconceptions, retrieval questions with answers, and exam tips. For calculations, show every step and units. For clinical topics, label scenarios as educational and never present them as personal medical advice.`;
 
   const userMsg = previousContent
-    ? `Continue this partially generated lesson without repeating its existing sections. Continue the interrupted thought and complete the remaining lesson:\n\n${previousContent}`
+    ? `Continue this lesson from its exact ending. Do not repeat the existing material. Add the remaining important content and keep the result self-contained:\n\n${previousContent}`
     : material
       ? `Study material:\n${material.slice(0, 8000)}`
       : `Teach me about: ${topic}. Use standard medical/premed curriculum.`;
-  const generationOptions = { system, prompt: userMsg, maxOutputTokens: 8000 };
+  const generationOptions = { system, prompt: userMsg, maxOutputTokens: 5000 };
   const shouldCacheLesson = Boolean(topic && !material && !previousContent);
 
   try {
@@ -143,7 +145,8 @@ Use clean Markdown headings, paragraphs, bold text, numbered lists, bullet lists
       for await (const text of callAIStream(generationOptions, {
         signal: abortController.signal,
         onComplete: interaction => {
-          reachedTokenLimit = (interaction.usage?.total_output_tokens || 0) >= 7900;
+          const outputTokens = interaction.usage?.output_tokens ?? interaction.usage?.total_output_tokens ?? 0;
+          reachedTokenLimit = outputTokens >= 4900;
         },
       })) {
         if (abortController.signal.aborted) break;
