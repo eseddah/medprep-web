@@ -18,7 +18,7 @@ const FLASH_LIMITS = { free: 15, pro: 100, annual: 150 };
 // POST /api/ai/quiz  — generate quiz questions
 router.post('/quiz', protect, async (req, res) => {
   const { topic, courseId, material, count, difficulty, type } = req.body;
-  const plan = req.user.plan || 'free';
+  const plan = req.user.getEffectivePlan();
   const maxQ = QUIZ_LIMITS[plan];
   const requested = Math.min(parseInt(count) || 20, maxQ);
 
@@ -35,7 +35,7 @@ Make questions clinically accurate, high-yield, and exam-relevant.`;
   const userMsg = material
     ? `Study material:\n${material.slice(0, 8000)}`
     : `Generate questions about: ${topic}. Use standard medical curriculum content.`;
-  const generationOptions = { system, prompt: userMsg, maxOutputTokens: 24000 };
+  const generationOptions = { system, prompt: userMsg, maxOutputTokens: Math.min(24000, requested * 220) };
 
   try {
     let raw = await getCachedGeneration('quiz', generationOptions);
@@ -58,7 +58,7 @@ Make questions clinically accurate, high-yield, and exam-relevant.`;
 // POST /api/ai/flashcards
 router.post('/flashcards', protect, async (req, res) => {
   const { topic, courseId, material, count } = req.body;
-  const plan = req.user.plan || 'free';
+  const plan = req.user.getEffectivePlan();
   const maxF = FLASH_LIMITS[plan];
   const requested = Math.min(parseInt(count) || 20, maxF);
 
@@ -74,10 +74,13 @@ Return ONLY valid JSON array:
     ? `Study material:\n${material.slice(0, 8000)}`
     : `Create flashcards about: ${topic}. Use standard medical/premed curriculum.`;
 
+  const generationOptions = { system, prompt: userMsg, maxOutputTokens: Math.min(16000, requested * 110) };
   try {
-    const raw = await callAI({ system, prompt: userMsg, maxOutputTokens: 8000 });
+    let raw = await getCachedGeneration('flashcards', generationOptions);
+    if (!raw) raw = await callAI(generationOptions);
     const cards = parseJsonText(raw);
     if (!Array.isArray(cards) || !cards.length) throw new Error('Gemini returned no flashcards. Please try again.');
+    await cacheGeneration('flashcards', generationOptions, raw);
 
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'stats.flashcardsStudied': cards.length } });
     res.json({ cards, count: cards.length, plan, maxAllowed: maxF });
@@ -216,15 +219,18 @@ router.post('/case', protect, async (req, res) => {
   if (!isConfigured()) return res.status(503).json({ error: AI_SETUP_ERROR });
 
   try {
-    const raw = await callAI({
+    const generationOptions = {
       maxOutputTokens: 5000,
       system: `Create a synthetic educational ${track.toLowerCase()} case round for a student studying ${course.title}, focused on ${topic}. This is coursework, not guidance for a real patient. Use a short, plausible vignette and 3 progressive decision steps. For premed courses, use a clinical or laboratory context to teach foundational biology, chemistry, physics, psychology, or mathematics. Make explanations rigorous, teach the underlying concepts, and do not invent citations. ${CLEAN_DIAGRAM_FORMAT} Return only valid JSON with this shape: {"title":"...","caseStem":"...","learningObjectives":["..."],"illustration":"A short numbered Markdown list describing a process, or an empty string","steps":[{"prompt":"...","options":["...","...","...","..."],"correctIndex":0,"explanation":"..."}],"debrief":"..."}. Include exactly 3 steps, each with 4 options and detailed rationales.`,
       prompt: `Track: ${track}\nCourse: ${course.title}\nTopic: ${topic}\nCreate the case now.`,
-    });
+    };
+    const cached = await getCachedGeneration('case', generationOptions);
+    const raw = cached || await callAI(generationOptions);
     const caseStudy = parseJsonText(raw);
     if (!Array.isArray(caseStudy.steps) || caseStudy.steps.length !== 3 || caseStudy.steps.some(step => !Array.isArray(step.options) || step.options.length !== 4 || !Number.isInteger(step.correctIndex) || !step.explanation)) {
       return res.status(502).json({ error: 'The case did not meet the expected format. Please generate another.' });
     }
+    if (!cached) await cacheGeneration('case', generationOptions, raw);
     res.json({ caseStudy, course: course.title, topic, track: track.toLowerCase() });
   } catch (error) {
     const exhausted = error.code === 'AI_UNAVAILABLE';

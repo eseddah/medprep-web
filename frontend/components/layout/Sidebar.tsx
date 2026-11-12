@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 import api from '@/lib/api';
+import { hasActiveTrial, isPro as hasProAccess } from '@/lib/auth';
 import clsx from 'clsx';
 import { BookOpen, BookOpenCheck, Brain, CreditCard, GraduationCap, Info, Layers, MessageCircle, RotateCcw, Settings, ShieldCheck, Sparkles } from 'lucide-react';
 
@@ -25,7 +26,8 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   const pathname = usePathname();
   const user = useStore(s => s.user);
   const [isAdmin, setIsAdmin] = useState(false);
-  const isPro = ['pro','annual'].includes(user?.plan || '');
+  const isPro = hasProAccess(user);
+  const isTrial = hasActiveTrial(user);
   const initials = user?.name?.split(' ').map((w:string) => w[0]).join('').slice(0,2).toUpperCase() || '?';
 
   useEffect(() => {
@@ -49,9 +51,9 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
 
       {/* Plan badge */}
       <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
-        <span className="text-[12px] text-text3">{isPro ? 'Pro Plan' : 'Free Plan'}</span>
+        <span className="text-[12px] text-text3">{isTrial ? 'Pro Trial' : isPro ? 'Pro Plan' : 'Free Plan'}</span>
         {isPro
-          ? <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background:'rgba(62,207,142,.15)', color:'var(--green)', border:'1px solid rgba(62,207,142,.3)' }}>Pro ✓</span>
+          ? <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background:'rgba(62,207,142,.15)', color:'var(--green)', border:'1px solid rgba(62,207,142,.3)' }}>{isTrial ? 'Trial ✓' : 'Pro ✓'}</span>
           : <Link href="/billing" className="text-[11px] font-bold px-2 py-0.5 rounded bg-amber text-black">Upgrade</Link>}
       </div>
 

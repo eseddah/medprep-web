@@ -7,7 +7,7 @@ import Input from '@/components/ui/Input';
 import { useStore } from '@/lib/store';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
-import { logout } from '@/lib/auth';
+import { hasActiveTrial, isPro, logout } from '@/lib/auth';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 
 type Tab = 'profile'|'password'|'preferences'|'billing'|'data'|'danger';
@@ -209,7 +209,8 @@ export default function SettingsPage() {
               <p className="text-text3 text-[13px] mb-5">Manage your plan and payment details.</p>
               <div className="bg-surface2 border border-border rounded-xl p-4 mb-5">
                 <div className="text-[12px] text-text3 uppercase tracking-wide mb-1">Current Plan</div>
-                <div className="text-[16px] font-semibold text-text">{user?.plan === 'annual' ? 'Pro Annual' : user?.plan === 'pro' ? 'Pro Monthly' : 'Free'}</div>
+                <div className="text-[16px] font-semibold text-text">{hasActiveTrial(user) && !['pro','annual'].includes(user?.plan || '') ? '14-day Pro trial' : isPro(user) && user?.plan === 'annual' ? 'Pro Annual' : isPro(user) ? 'Pro Monthly' : 'Free'}</div>
+                {hasActiveTrial(user) && <p className="mt-1 text-[12px] text-text3">Full access until {new Date(user!.trialEndsAt!).toLocaleDateString()}; no automatic charge.</p>}
               </div>
               <div className="flex gap-3 flex-wrap">
                 <Button variant="primary" onClick={() => window.location.href='/billing'}>Manage Plan</Button>

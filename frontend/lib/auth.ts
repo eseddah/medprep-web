@@ -5,6 +5,10 @@ export interface User {
   name: string;
   email: string;
   plan: 'free' | 'pro' | 'annual';
+  effectivePlan?: 'free' | 'pro' | 'annual';
+  trialStartedAt?: string;
+  trialEndsAt?: string | null;
+  planExpiresAt?: string | null;
   bio?: string;
   school?: string;
   year?: string;
@@ -56,4 +60,7 @@ export const getStoredUser = (): User | null => {
   try { return JSON.parse(localStorage.getItem('medprep_user') || 'null'); } catch { return null; }
 };
 
-export const isPro = (user: User | null) => ['pro','annual'].includes(user?.plan || '');
+export const isPro = (user: User | null) => ['pro','annual'].includes(user?.effectivePlan || user?.plan || '');
+
+export const hasActiveTrial = (user: User | null) =>
+  Boolean(user?.trialEndsAt && new Date(user.trialEndsAt).getTime() > Date.now());

@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+const TRIAL_DURATION_MS = 14 * 24 * 60 * 60 * 1000;
+
 const userSchema = new mongoose.Schema({
   name:      { type: String, required: true, trim: true },
   email:     { type: String, required: true, unique: true, lowercase: true },
@@ -22,6 +24,7 @@ const userSchema = new mongoose.Schema({
   // Billing
   paystackCustomerId:   String,
   planExpiresAt:        Date,
+  trialStartedAt:       Date,
   // Preferences
   preferences: {
     theme:           { type: String, default: 'dark' },
@@ -53,6 +56,19 @@ userSchema.methods.matchPassword = function(pw) {
   return bcrypt.compare(pw, this.password);
 };
 
+userSchema.methods.getTrialEndsAt = function() {
+  return this.trialStartedAt ? new Date(this.trialStartedAt.getTime() + TRIAL_DURATION_MS) : null;
+};
+
+userSchema.methods.getEffectivePlan = function() {
+  const now = new Date();
+  const paidPlanActive = ['pro', 'annual'].includes(this.plan)
+    && (!this.planExpiresAt || this.planExpiresAt > now);
+  if (paidPlanActive) return this.plan;
+  const trialEndsAt = this.getTrialEndsAt();
+  return trialEndsAt && trialEndsAt > now ? 'pro' : 'free';
+};
+
 userSchema.methods.toPublic = function() {
   const o = this.toObject();
   delete o.password;
@@ -61,6 +77,8 @@ userSchema.methods.toPublic = function() {
   delete o.studyReminderSentDate;
   delete o.studyReminderLockUntil;
   delete o.studyReminderLockToken;
+  o.trialEndsAt = this.getTrialEndsAt();
+  o.effectivePlan = this.getEffectivePlan();
   return o;
 };
 

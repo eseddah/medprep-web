@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from './Sidebar';
 import { useStore } from '@/lib/store';
 import { getStoredUser } from '@/lib/auth';
+import api from '@/lib/api';
 import ThemeToggle from '@/components/ui/ThemeToggle';
 import { Menu } from 'lucide-react';
 import StreakButton from './StreakButton';
@@ -22,6 +23,20 @@ export default function DashboardLayout({ children, title, sub }: { children: Re
       return;
     }
     setUser(stored);
+    const refreshUser = async () => {
+      try {
+        const { data } = await api.get('/auth/me');
+        setUser(data.user);
+        localStorage.setItem('medprep_user', JSON.stringify(data.user));
+      } catch {}
+    };
+    void refreshUser();
+    const interval = window.setInterval(refreshUser, 5 * 60 * 1000);
+    window.addEventListener('focus', refreshUser);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshUser);
+    };
   }, []);
 
   if (!user) return (
@@ -51,7 +66,7 @@ export default function DashboardLayout({ children, title, sub }: { children: Re
           <div className="flex shrink-0 items-center gap-2 md:gap-3">
             <StreakButton />
             <ThemeToggle />
-            {['pro','annual'].includes(user.plan) ? null : (
+            {['pro','annual'].includes(user.effectivePlan || user.plan) ? null : (
               <a href="/billing" className="px-3 md:px-4 py-2 rounded-lg text-[12px] md:text-[13px] font-semibold text-white whitespace-nowrap" style={{ background:'var(--accent)' }}>Upgrade to Pro</a>
             )}
           </div>

@@ -181,7 +181,13 @@ router.post('/paystack/verify', protect, async (req, res) => {
   if (!claimedOrder) return res.status(409).json({ error: 'Payment is already being verified' });
 
   const currentUser = await User.findById(req.user._id);
-  const start = currentUser.planExpiresAt && currentUser.planExpiresAt > new Date() ? currentUser.planExpiresAt : new Date();
+  const now = new Date();
+  const trialEndsAt = currentUser.trialStartedAt
+    ? new Date(currentUser.trialStartedAt.getTime() + 14 * 24 * 60 * 60 * 1000)
+    : now;
+  const start = [currentUser.planExpiresAt, trialEndsAt]
+    .filter(date => date && date > now)
+    .reduce((latest, date) => date > latest ? date : latest, now);
   await User.findByIdAndUpdate(req.user._id, {
     plan: plan.plan,
     paystackCustomerId: transaction.customer.customer_code,
@@ -215,7 +221,10 @@ router.post('/paystack/verify', protect, async (req, res) => {
 router.get('/status', protect, (req, res) => {
   res.json({
     plan: req.user.plan,
+    effectivePlan: req.user.getEffectivePlan(),
     planExpiresAt: req.user.planExpiresAt,
+    trialStartedAt: req.user.trialStartedAt,
+    trialEndsAt: req.user.getTrialEndsAt(),
     hasPaystack: !!req.user.paystackCustomerId,
   });
 });

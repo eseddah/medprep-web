@@ -4,9 +4,9 @@ const FREE_DAILY_CONCEPT_LIMIT = 3;
 
 async function reserveDailyConcept(userId) {
   const today = new Date().toISOString().slice(0, 10);
-  const user = await User.findById(userId).select('plan stats.dailyConceptsUsed stats.dailyConceptsDate');
+  const user = await User.findById(userId).select('plan planExpiresAt trialStartedAt stats.dailyConceptsUsed stats.dailyConceptsDate');
   if (!user) return { allowed: false, remaining: 0, limit: FREE_DAILY_CONCEPT_LIMIT };
-  if (['pro', 'annual'].includes(user.plan)) return { allowed: true, remaining: null, limit: null };
+  if (['pro', 'annual'].includes(user.getEffectivePlan())) return { allowed: true, remaining: null, limit: null };
 
   const updated = await User.findOneAndUpdate({
     _id: userId,

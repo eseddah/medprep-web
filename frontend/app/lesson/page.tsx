@@ -16,6 +16,7 @@ import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
 import { saveStudyHistory, type StudyHistoryEntry } from '@/lib/studyHistory';
 import Link from 'next/link';
 import { Pause, Play } from 'lucide-react';
+import { isPro as hasProAccess } from '@/lib/auth';
 
 export default function LessonPage() {
   const [content, setContent] = useState('');
@@ -30,7 +31,7 @@ export default function LessonPage() {
   const abortController = useRef<AbortController | null>(null);
   const requestSequence = useRef(0);
   const user = useStore(state => state.user);
-  const isPro = ['pro', 'annual'].includes(user?.plan || '');
+  const isPro = hasProAccess(user);
   const today = new Date().toISOString().slice(0, 10);
   const lessonsUsedToday = lessonUsage.date === today ? lessonUsage.used : 0;
   const lessonsRemaining = Math.max(0, 3 - lessonsUsedToday);
