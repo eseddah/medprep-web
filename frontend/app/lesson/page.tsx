@@ -17,6 +17,7 @@ import { saveStudyHistory, type StudyHistoryEntry } from '@/lib/studyHistory';
 import Link from 'next/link';
 import { Pause, Play } from 'lucide-react';
 import { isPro as hasProAccess } from '@/lib/auth';
+import TextToSpeech from '@/components/ui/TextToSpeech';
 
 export default function LessonPage() {
   const [content, setContent] = useState('');
@@ -155,7 +156,10 @@ export default function LessonPage() {
             : paused
               ? <div className="flex items-center gap-2"><span className="text-[13px] text-amber">Paused · partial lesson saved</span><Button size="sm" variant="ghost" onClick={()=>generate(content)}><Play size={14}/>Resume</Button></div>
               : <span className="text-[13px]" style={{color:'var(--green)'}}>✓ Lesson ready</span>}
-          {!streaming&&!paused&&<Button size="sm" variant="ghost" onClick={()=>{setContent('');setGenerationError('');setStreaming(false);}}>Generate New</Button>}
+          <div className="flex items-center gap-2">
+            {!streaming&&!paused&&content&&<TextToSpeech text={content} />}
+            {!streaming&&!paused&&<Button size="sm" variant="ghost" onClick={()=>{setContent('');setGenerationError('');setStreaming(false);}}>Generate New</Button>}
+          </div>
         </div>
         <Card>
           {formatLesson(content)}

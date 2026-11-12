@@ -12,6 +12,7 @@ import { recordStreakActivity } from '@/lib/streak';
 import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
 import { parseStudyResponse, saveStudyHistory, type StudyHistoryEntry } from '@/lib/studyHistory';
 import toast from 'react-hot-toast';
+import TextToSpeech from '@/components/ui/TextToSpeech';
 
 type CaseStep = { prompt: string; options: string[]; correctIndex: number; explanation: string };
 type CaseStudy = { title: string; caseStem: string; learningObjectives: string[]; illustration: string; steps: CaseStep[]; debrief: string };
@@ -96,6 +97,18 @@ export default function CasesPage() {
   };
 
   const step = caseStudy?.steps[stepIndex];
+  const caseAudioText = caseStudy ? [
+    caseStudy.title,
+    caseStudy.caseStem,
+    ...(caseStudy.learningObjectives || []),
+    ...caseStudy.steps.flatMap((item, index) => [
+      `Decision ${index + 1}: ${item.prompt}`,
+      ...item.options.map((option, optionIndex) => `${String.fromCharCode(65 + optionIndex)}. ${option}`),
+      `Answer: ${item.options[item.correctIndex] || ''}. ${item.explanation}`,
+    ]),
+    caseStudy.debrief,
+    caseStudy.illustration,
+  ].filter(Boolean).join('\n\n') : '';
 
   return (
     <DashboardLayout title="Clinical Case Rounds" sub="Practice reasoning through progressive medical and premed scenarios">
@@ -138,7 +151,10 @@ export default function CasesPage() {
               <p className="text-[11px] uppercase tracking-wide text-text3">{track} · {course.title} · {topic}</p>
               <h2 className="font-dm-serif text-[24px] text-text">{formatInline(caseStudy.title)}</h2>
             </div>
-            <Button variant="ghost" size="sm" onClick={generate} disabled={loading}><RotateCcw size={15} /> New case</Button>
+            <div className="flex items-center gap-2">
+              <TextToSpeech text={caseAudioText} />
+              <Button variant="ghost" size="sm" onClick={generate} disabled={loading}><RotateCcw size={15} /> New case</Button>
+            </div>
           </div>
           <Card>
             <div className="text-[14px] leading-relaxed text-text2">{formatLesson(caseStudy.caseStem)}</div>

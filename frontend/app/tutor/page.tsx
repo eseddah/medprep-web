@@ -13,6 +13,7 @@ import toast from 'react-hot-toast';
 import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
 import { parseStudyResponse, saveStudyHistory, type StudyHistoryEntry } from '@/lib/studyHistory';
 import { isPro as hasProAccess } from '@/lib/auth';
+import TextToSpeech from '@/components/ui/TextToSpeech';
 
 type TutorMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -106,7 +107,12 @@ export default function TutorPage() {
               {messages.map((message, index) => (
                 <article key={`${index}-${message.role}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[88%] break-words rounded-xl px-4 py-3 text-[13px] leading-relaxed ${message.role === 'user' ? 'whitespace-pre-wrap rounded-br-sm bg-accent text-white' : 'rounded-bl-sm border border-border2 bg-surface text-text'}`}>
-                    {message.role === 'assistant' ? formatLesson(message.content) : message.content}
+                    {message.role === 'assistant' ? (
+                      <>
+                        {formatLesson(message.content)}
+                        <TextToSpeech text={message.content} className="mt-3" />
+                      </>
+                    ) : message.content}
                   </div>
                 </article>
               ))}

@@ -41,12 +41,13 @@ export const googleLogin = async (credential: string) => {
 };
 
 export const getPostAuthPath = () => {
+  const search = typeof window === 'undefined' ? new URLSearchParams() : new URLSearchParams(window.location.search);
   const referral = typeof window === 'undefined'
     ? ''
-    : (new URLSearchParams(window.location.search).get('referral') || localStorage.getItem('medprep_pending_referral') || '').trim().toUpperCase();
+    : (search.get('referral') || localStorage.getItem('medprep_pending_referral') || '').trim().toUpperCase();
   return /^[A-Z0-9_-]{4,32}$/.test(referral)
     ? `/billing?referral=${encodeURIComponent(referral)}`
-    : '/courses';
+    : search.get('next') === '/billing' ? '/billing' : '/courses';
 };
 
 export const logout = () => {

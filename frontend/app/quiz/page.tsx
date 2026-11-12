@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 import Spinner from '@/components/ui/Spinner';
 import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
 import { parseStudyResponse, saveStudyHistory } from '@/lib/studyHistory';
+import TextToSpeech from '@/components/ui/TextToSpeech';
 
 interface Question { question:string; options:string[]; correct:number; explanation:string; topic?:string; }
 type Phase = 'setup'|'questions'|'results';
@@ -168,7 +169,10 @@ export default function QuizPage() {
           <div className="h-1 bg-border rounded-full mb-4 overflow-hidden"><div className="h-full bg-accent rounded-full transition-all" style={{width:`${Math.round(answeredCount/total*100)}%`}} /></div>
           <div className="flex justify-between items-center mb-5">
             <span className="text-[13px] text-text3">{answeredCount} / {total} answered</span>
-            {answeredCount === total && <Button variant="primary" size="sm" onClick={completeQuiz}>See Results →</Button>}
+            <div className="flex items-center gap-2">
+              <TextToSpeech text={questions.map((question, index) => `Question ${index + 1}. ${question.question} Choices: ${question.options.map((option, optionIndex) => `${String.fromCharCode(65 + optionIndex)}. ${option}`).join('. ')}. Answer: ${question.options[question.correct] || ''}. ${question.explanation}`).join('\n\n')} />
+              {answeredCount === total && <Button variant="primary" size="sm" onClick={completeQuiz}>See Results →</Button>}
+            </div>
           </div>
           {questions.map((q,qi) => {
             const ans = answered[qi];
@@ -205,7 +209,10 @@ export default function QuizPage() {
               <div className="text-[14px] mt-1" style={{color: pct>=80?'var(--green)':pct>=60?'var(--accent)':'var(--amber)'}}>{pct>=80?'Excellent! 🎉':pct>=60?'Good effort! 👍':'Keep studying! 📚'}</div>
               <div className="text-[13px] text-text3 mt-1">{score} of {total} correct</div>
             </div>
-            <Button size="sm" variant="ghost" onClick={()=>{setPhase('setup');setQuestions([]);setAnswered({});setScore(0);}}>↺ New Quiz</Button>
+            <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+              <TextToSpeech text={questions.map((question, index) => `Question ${index + 1}. ${question.question}. ${question.explanation}`).join('\n\n')} />
+              <Button size="sm" variant="ghost" onClick={()=>{setPhase('setup');setQuestions([]);setAnswered({});setScore(0);}}>↺ New Quiz</Button>
+            </div>
           </div>
           {questions.map((q,qi) => {
             const ans = answered[qi]; const ok = ans===q.correct;

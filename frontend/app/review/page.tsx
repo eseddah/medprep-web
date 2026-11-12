@@ -10,6 +10,7 @@ import { recordStreakActivity } from '@/lib/streak';
 import toast from 'react-hot-toast';
 import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
 import { saveStudyHistory, type StudyHistoryEntry } from '@/lib/studyHistory';
+import TextToSpeech from '@/components/ui/TextToSpeech';
 
 type ReviewItem = {
   id: string;
@@ -150,6 +151,12 @@ export default function ReviewPage() {
                 </div>}
                 {current.type === 'question' && revealed && !correct && <button type="button" onClick={() => void explainAnswer()} disabled={explaining} className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold text-accent hover:underline disabled:opacity-60"><Lightbulb size={14} />{explaining ? 'Explaining…' : 'Explain'}</button>}
                 {aiExplanation && <p className="mt-3 whitespace-pre-wrap rounded-lg border border-border bg-surface2 p-3 text-[13px] leading-relaxed text-text2">{aiExplanation}</p>}
+                {revealed && <div className="mt-4"><TextToSpeech text={[
+                  current.prompt,
+                  current.type === 'question' ? `Correct answer: ${current.options[current.correctIndex] || current.answer}` : current.answer,
+                  current.explanation,
+                  aiExplanation,
+                ].filter(Boolean).join('. ')} /></div>}
 
                 {revealed && <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {RATINGS.map(rating => <button key={rating.value} type="button" disabled={busy} onClick={() => void rateItem(rating.value)} className="flex min-h-14 flex-col items-center justify-center rounded-lg border border-border2 bg-surface2 px-2 py-2 text-text hover:border-accent hover:bg-accent/5 disabled:opacity-50">

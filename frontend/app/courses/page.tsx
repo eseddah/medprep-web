@@ -8,7 +8,7 @@ import { useStore } from '@/lib/store';
 import { COURSES } from '@/lib/courses';
 import ReviewDashboard from '@/components/review/ReviewDashboard';
 import { isPro } from '@/lib/auth';
-import CourseDiagram from '@/components/courses/CourseDiagram';
+import CourseArtwork from '@/components/courses/CourseArtwork';
 
 export default function CoursesPage() {
   const user = useStore(s => s.user);
@@ -19,12 +19,12 @@ export default function CoursesPage() {
   return (
     <DashboardLayout title="Courses" sub="Structured study paths across medicine, science, and mathematics">
       <section className="relative overflow-hidden rounded-xl border border-border bg-surface mb-7 min-h-[190px]">
-        <div className="absolute inset-0"><CourseDiagram course={COURSES[0]} compact /></div>
+        <div className="absolute inset-0"><CourseArtwork course={COURSES[0]} priority imageClassName="object-[center_30%]" /></div>
         <div className="absolute inset-0" style={{background:'linear-gradient(90deg,rgba(18,38,33,.94) 0%,rgba(18,38,33,.76) 52%,rgba(18,38,33,.18) 100%)'}} />
         <div className="relative max-w-xl p-6 md:p-8 text-white">
-          <p className="text-[11px] uppercase tracking-wide text-white/75 mb-2">Study library · {COURSES.length} courses</p>
-          <h2 className="font-dm-serif text-[25px] md:text-[29px] mb-2">Build understanding, one system at a time.</h2>
-          <p className="text-[13px] leading-relaxed text-white/85">Choose a course to explore illustrated topics, detailed lessons, and practice tools.</p>
+          <p className="text-[12px] uppercase tracking-wide text-white/75 mb-2">Study library · {COURSES.length} courses</p>
+          <h2 className="font-dm-serif text-[27px] md:text-[32px] mb-2">Build understanding, one system at a time.</h2>
+          <p className="text-[15px] leading-relaxed text-white/85">Choose a course to explore illustrated topics, detailed lessons, and practice tools.</p>
         </div>
       </section>
       <div className="flex gap-2 mb-6">
@@ -40,7 +40,7 @@ export default function CoursesPage() {
           return (
             <div key={course.id} className={`bg-surface border border-border rounded-xl overflow-hidden transition-all hover:border-border2 hover:-translate-y-0.5 ${locked?'opacity-90':''}`}>
               <div className="relative h-44 overflow-hidden bg-surface2">
-                <CourseDiagram course={course} compact />
+              <CourseArtwork course={course} imageClassName="transition duration-500 hover:scale-[1.04]" />
                 <div className="absolute inset-0" style={{background:'linear-gradient(0deg,rgba(17,33,29,.63),transparent 70%)'}} />
                 <span className="absolute bottom-3 left-4 text-white text-[12px] font-medium">{course.title}</span>
                 <span className="absolute top-3 left-3 w-1 h-10 rounded-full" style={{background:course.color}} />

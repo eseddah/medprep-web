@@ -12,6 +12,7 @@ import { getStudyTopicContext } from '@/lib/studyTopics';
 import toast from 'react-hot-toast';
 import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
 import { parseStudyResponse, saveStudyHistory } from '@/lib/studyHistory';
+import TextToSpeech from '@/components/ui/TextToSpeech';
 
 interface FlashCard { front: string; back: string; }
 
@@ -130,6 +131,7 @@ export default function FlashcardsPage() {
         <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
           <span className="text-[13px] text-text3">Card {current+1} of {cards.length} · <span style={{color:'var(--green)'}}>{known.size} known</span></span>
           <div className="flex gap-2">
+            <TextToSpeech text={`${card.front}. ${card.back}`} />
             <Button size="sm" variant="ghost" onClick={()=>{setCards(c=>[...c].sort(()=>Math.random()-.5));setCurrent(0);setFlipped(false);}}>🔀</Button>
             <Button size="sm" variant="ghost" onClick={()=>{setCards([]);setKnown(new Set());setReviewRecorded(false);}}>↺ Reset</Button>
             <Button size="sm" variant="ghost" onClick={saveForReview} disabled={savingCard || savedCards.has(card.front)}>{savedCards.has(card.front) ? 'Saved' : savingCard ? 'Saving…' : 'Save to Review'}</Button>
