@@ -166,19 +166,22 @@ async function* callAIStream(options = {}, { signal, onComplete } = {}) {
 
   for (const model of models) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+      let hasGeneratedText = false;
+      let hasStreamedChunk = false;
       try {
-        let generated = '';
         for await (const chunk of streamText({ ...options, model }, { signal, onComplete })) {
-          generated += chunk;
+          if (chunk) hasStreamedChunk = true;
+          if (chunk.trim()) hasGeneratedText = true;
+          yield chunk;
         }
-        if (!generated.trim()) throw new Error('Gemini returned an empty response.');
-        yield generated;
+        if (!hasGeneratedText) throw new Error('Gemini returned an empty response.');
         return;
       } catch (error) {
         lastError = error;
         if (signal?.aborted) throw error;
         logGeminiFailure(error, model, attempt);
         if (error?.code === 'GEMINI_NOT_CONFIGURED') throw error;
+        if (hasStreamedChunk) throw error;
         if (isModelNotFound(error) || !shouldRetryAiError(error) || attempt === MAX_ATTEMPTS) break;
         const delay = RETRY_DELAYS_MS[attempt - 1] + Math.floor(Math.random() * 251);
         await sleep(delay);

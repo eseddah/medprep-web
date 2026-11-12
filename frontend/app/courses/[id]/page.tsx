@@ -60,6 +60,7 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
     setLessonError('');
     setPaused(false);
     setStreaming(true);
+    let full = previousContent;
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/ai/lesson`, {
         method: 'POST',
@@ -67,7 +68,6 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
         body: JSON.stringify({ topic: `${course.title}: ${topic}`, courseId: course.id, depth:'Deep dive', previousContent }),
         signal: controller.signal,
       });
-      let full = previousContent;
       const incomplete = await consumeLessonStream(res, text => {
         full += text;
         if (sequence === requestSequence.current) setContent(full);
@@ -88,7 +88,13 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
     } catch (error: any) {
       if (sequence === requestSequence.current && !controller.signal.aborted) {
         const message = error.message || 'Could not generate this lesson. Please try again.';
-        setLessonError(message);
+        if (full.trim()) {
+          setContent(full);
+          setPaused(true);
+          setLessonError('Generation stopped before the lesson was complete. Continue to resume from the saved text.');
+        } else {
+          setLessonError(message);
+        }
         toast.error(message);
       }
     } finally {
@@ -186,14 +192,14 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
                 </div>
                 <div className="flex items-center gap-2">
                   {streaming && <><span className="flex items-center gap-2 text-[12px] text-text2"><Spinner size={13} color="var(--accent)"/>Generating…</span><button type="button" onClick={pauseLesson} className="inline-flex items-center gap-1 rounded-md border border-border2 px-2 py-1 text-[11px] font-medium text-text2 hover:border-accent"><Pause size={13}/>Pause</button></>}
-                  {paused && <><span className="text-[12px] text-amber">Paused · partial lesson saved</span><button type="button" onClick={() => activeTopic && loadTopic(activeTopic, content)} className="inline-flex items-center gap-1 rounded-md border border-accent px-2 py-1 text-[11px] font-semibold text-accent"><Play size={13}/>Resume</button></>}
-                  {!streaming && !paused && content && <TextToSpeech text={content} />}
+                  {paused && <><span className="text-[12px] text-amber">Partial lesson · ready to continue</span><button type="button" onClick={() => activeTopic && loadTopic(activeTopic, content)} className="inline-flex items-center gap-1 rounded-md border border-accent px-2 py-1 text-[11px] font-semibold text-accent"><Play size={13}/>Continue generation</button></>}
+                  {!streaming && !paused && content && <><TextToSpeech text={content} /><button type="button" onClick={() => activeTopic && loadTopic(activeTopic, content)} className="inline-flex items-center gap-1 rounded-md border border-border2 px-2 py-1 text-[11px] font-medium text-text2 hover:border-accent">Continue lesson</button></>}
                 </div>
               </div>
               <div className="leading-relaxed">
                 {formatLesson(content)}
                 {streaming && <span className="inline-block w-2 h-3.5 ml-0.5 align-middle" style={{background:'var(--accent)',animation:'blink .8s step-end infinite'}}/>}
-                {lessonError && <div role="alert" className="mt-4 rounded-lg border border-red/40 bg-red/10 p-4 text-[13px] text-red"><p>{lessonError}</p><button type="button" onClick={() => activeTopic && loadTopic(activeTopic)} className="mt-2 font-semibold underline">Retry lesson</button></div>}
+                {lessonError && <div role="alert" className="mt-4 rounded-lg border border-red/40 bg-red/10 p-4 text-[13px] text-red"><p>{lessonError}</p>{!paused && <button type="button" onClick={() => activeTopic && loadTopic(activeTopic)} className="mt-2 font-semibold underline">Retry lesson</button>}</div>}
               </div>
             </Card>
           )}

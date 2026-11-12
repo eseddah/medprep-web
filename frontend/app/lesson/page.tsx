@@ -58,13 +58,13 @@ export default function LessonPage() {
     const controller = new AbortController();
     abortController.current = controller;
     setContent(previousContent); setGenerationError(''); setPaused(false); setStreaming(true);
+    let full = previousContent;
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL||'http://localhost:5000/api'}/ai/lesson`, {
         method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('medprep_token')}`},
         body: JSON.stringify({ topic, material, depth, previousContent }),
         signal: controller.signal,
       });
-      let full = previousContent;
       const incomplete = await consumeLessonStream(res, text => { full += text; setContent(full); });
       if (!full.trim()) throw new Error('No lesson content was returned. Please try again.');
       if (incomplete) {
@@ -80,7 +80,13 @@ export default function LessonPage() {
     } catch(error: any){
       if (!controller.signal.aborted) {
         const message = error.message || 'Could not generate the lesson. Please try again.';
-        setGenerationError(message);
+        if (full.trim()) {
+          setContent(full);
+          setPaused(true);
+          setGenerationError('Generation stopped before the lesson was complete. Continue to resume from the saved text.');
+        } else {
+          setGenerationError(message);
+        }
         toast.error(message);
         await refreshLessonUsage();
       }
@@ -154,10 +160,11 @@ export default function LessonPage() {
           {streaming
             ? <div className="flex items-center gap-2 text-[13px] text-text2"><Spinner size={14} color="var(--accent)"/>Generating lesson…<Button size="sm" variant="ghost" onClick={pauseGeneration}><Pause size={14}/>Pause</Button></div>
             : paused
-              ? <div className="flex items-center gap-2"><span className="text-[13px] text-amber">Paused · partial lesson saved</span><Button size="sm" variant="ghost" onClick={()=>generate(content)}><Play size={14}/>Resume</Button></div>
+              ? <div className="flex items-center gap-2"><span className="text-[13px] text-amber">Partial lesson · ready to continue</span><Button size="sm" variant="ghost" onClick={()=>generate(content)}><Play size={14}/>Continue generation</Button></div>
               : <span className="text-[13px]" style={{color:'var(--green)'}}>✓ Lesson ready</span>}
           <div className="flex items-center gap-2">
             {!streaming&&!paused&&content&&<TextToSpeech text={content} />}
+            {!streaming&&!paused&&content&&<Button size="sm" variant="ghost" onClick={()=>generate(content)}><Play size={14}/>Continue lesson</Button>}
             {!streaming&&!paused&&<Button size="sm" variant="ghost" onClick={()=>{setContent('');setGenerationError('');setStreaming(false);}}>Generate New</Button>}
           </div>
         </div>
