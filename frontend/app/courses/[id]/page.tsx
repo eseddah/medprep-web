@@ -3,8 +3,10 @@ import { useState, use, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Card from '@/components/ui/Card';
-import { COURSES, courseImageUrl } from '@/lib/courses';
+import { COURSES } from '@/lib/courses';
 import { useStore } from '@/lib/store';
+import { isPro as hasProAccess } from '@/lib/auth';
+import CourseDiagram from '@/components/courses/CourseDiagram';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import Spinner from '@/components/ui/Spinner';
@@ -33,7 +35,7 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
   const requestSequence = useRef(0);
   const abortController = useRef<AbortController | null>(null);
   const user = useStore(s => s.user);
-  const isPro = ['pro','annual'].includes(user?.plan || '');
+  const isPro = hasProAccess(user);
   const today = new Date().toISOString().slice(0, 10);
   const lessonsUsedToday = lessonUsage.date === today ? lessonUsage.used : 0;
   const lessonsRemaining = Math.max(0, 3 - lessonsUsedToday);
@@ -111,7 +113,7 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
     <DashboardLayout title={course.title} sub={course.desc}>
       <Link href="/courses" className="text-[13px] text-text3 hover:text-text flex items-center gap-1.5 mb-5">← All courses</Link>
       <section className="relative overflow-hidden rounded-xl border border-border bg-surface mb-6 h-[190px] md:h-[230px]">
-        <img src={courseImageUrl(course.image)} alt={`${course.title} study illustration`} className="absolute inset-0 w-full h-full object-cover" />
+        <div className="absolute inset-0"><CourseDiagram course={course} compact /></div>
         <div className="absolute inset-0" style={{background:'linear-gradient(90deg,rgba(18,38,33,.94),rgba(18,38,33,.72) 50%,rgba(18,38,33,.16))'}} />
         <div className="relative h-full flex flex-col justify-end p-5 md:p-7 text-white max-w-2xl">
           <div className="text-[11px] uppercase tracking-wide text-white/75 mb-1">{course.cat} · {course.topics.length} learning modules</div>
@@ -134,14 +136,10 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
               ))}
             </div>
           </Card>
-          {course.staticImages.length > 0 && (
-            <Card>
-              <p className="text-[11px] text-text3 uppercase tracking-wide mb-2">Course illustrations</p>
-              {course.staticImages.map((src,i) => (
-                <img key={i} src={courseImageUrl(src)} alt={`${course.title} study diagram`} className="w-full rounded-lg border border-border mb-2 bg-surface object-contain" style={{height:120}} loading="lazy" onError={e=>(e.currentTarget.style.display='none')}/>
-              ))}
-            </Card>
-          )}
+          <Card className="p-3">
+            <p className="px-1 text-[11px] text-text3 uppercase tracking-wide mb-2">Course concept map</p>
+            <CourseDiagram course={course} />
+          </Card>
           <Card className="p-0 overflow-hidden">
             <div className="p-4 border-b border-border">
               <p className="text-[11px] text-text3 uppercase tracking-wide mb-1">Verified 3D source</p>
@@ -164,7 +162,6 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
                 <a href={`https://3d.nih.gov/discover?search=${encodeURIComponent(course.title)}`} target="_blank" rel="noreferrer" className="inline-flex text-[12px] font-semibold text-accent hover:underline">Search NIH 3D models ↗</a>
               </div>
             )}
-            <a href={NIH3D_ENTRY} target="_blank" rel="noreferrer" className="block border-t border-border px-4 py-3 text-[11px] text-text3 hover:text-accent">Open source entry at 3d.nih.gov ↗</a>
           </Card>
         </div>
         <div>
@@ -178,7 +175,7 @@ export default function CoursePage({ params }: { params: Promise<{ id: string }>
           ) : !activeTopic ? (
             <Card className="text-center py-16">
               <div className="mb-5 overflow-hidden rounded-lg max-h-64 border border-border bg-surface2">
-                <img src={courseImageUrl(course.image)} alt={`${course.title} illustration`} className="w-full max-h-64 object-contain" />
+                <CourseDiagram course={course} />
               </div>
               <h3 className="font-dm-serif text-[18px] text-text mb-2">Select a topic</h3>
               <p className="text-[13px] text-text3">Choose any topic from the list to generate an AI-powered lesson.</p>

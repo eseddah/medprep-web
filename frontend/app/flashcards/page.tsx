@@ -17,7 +17,7 @@ interface FlashCard { front: string; back: string; }
 
 export default function FlashcardsPage() {
   const user = useStore(s => s.user);
-  const plan = user?.plan || 'free';
+  const plan = user?.effectivePlan || user?.plan || 'free';
   const maxF = FLASH_LIMITS[plan as keyof typeof FLASH_LIMITS] || 15;
   const [cards, setCards] = useState<FlashCard[]>([]);
   const [current, setCurrent] = useState(0);

@@ -6,8 +6,17 @@ const protect = async (req, res, next) => {
   if (!token) return res.status(401).json({ error: 'Not authorized' });
   try {
     const { id } = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(id).select('-password');
-    if (!req.user) return res.status(401).json({ error: 'User not found' });
+    let user = await User.findById(id).select('-password');
+    if (!user) return res.status(401).json({ error: 'User not found' });
+    if (!user.trialStartedAt) {
+      user = await User.findOneAndUpdate(
+        { _id: user._id, $or: [{ trialStartedAt: { $exists: false } }, { trialStartedAt: null }] },
+        { $set: { trialStartedAt: new Date() } },
+        { new: true },
+      ).select('-password') || await User.findById(id).select('-password');
+    }
+    if (!user) return res.status(401).json({ error: 'User not found' });
+    req.user = user;
     next();
   } catch {
     res.status(401).json({ error: 'Token invalid or expired' });
@@ -15,7 +24,7 @@ const protect = async (req, res, next) => {
 };
 
 const requirePro = (req, res, next) => {
-  if (['pro', 'annual'].includes(req.user?.plan)) return next();
+  if (['pro', 'annual'].includes(req.user?.getEffectivePlan())) return next();
   res.status(403).json({ error: 'Pro plan required', upgrade: true });
 };
 

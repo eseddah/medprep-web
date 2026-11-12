@@ -8,6 +8,7 @@ import { useStore } from '@/lib/store';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Copy, Link2 } from 'lucide-react';
+import { hasActiveTrial, isPro as hasProAccess } from '@/lib/auth';
 
 type Cycle = 'monthly' | 'annual';
 
@@ -121,7 +122,7 @@ function BillingContent() {
   const verifyPaystack = async (ref: string) => {
     try {
       const { data } = await api.post('/billing/paystack/verify', { reference: ref });
-      updateUser({ plan: data.plan });
+      updateUser(data.user);
       localStorage.setItem('medprep_user', JSON.stringify(data.user));
       toast.success('Payment verified! Pro unlocked 🎉');
     } catch (e: any) {
@@ -142,7 +143,10 @@ function BillingContent() {
     setLoading(null);
   };
 
-  const isPro = ['pro','annual'].includes(user?.plan||'');
+  const isPro = hasProAccess(user);
+  const trialActive = hasActiveTrial(user);
+  const paidPlanActive = ['pro','annual'].includes(user?.plan || '')
+    && (!user?.planExpiresAt || new Date(user.planExpiresAt).getTime() > Date.now());
 
   return (
     <DashboardLayout title="Plans & Billing" sub="Unlock full access to all courses and AI tools">
@@ -150,11 +154,15 @@ function BillingContent() {
       <div className="rounded-2xl p-5 mb-8 flex items-center justify-between" style={{ background:'rgba(79,142,247,0.07)', border:'1px solid rgba(79,142,247,0.25)' }}>
         <div>
           <div className="text-[11px] text-text3 uppercase tracking-wide mb-1">Current Plan</div>
-          <div className="text-[16px] font-semibold text-text">{user?.plan === 'annual' ? 'Pro Annual' : user?.plan === 'pro' ? 'Pro Monthly' : 'Free'}</div>
-          <div className="text-[12px] text-text3 mt-0.5">{isPro ? 'All courses & tools unlocked' : '5 courses · Limited usage'}</div>
+          <div className="text-[16px] font-semibold text-text">{trialActive && !paidPlanActive ? '14-day Pro trial' : paidPlanActive ? (user?.plan === 'annual' ? 'Pro Annual' : 'Pro Monthly') : 'Free'}</div>
+          <div className="text-[12px] text-text3 mt-0.5">
+            {trialActive
+              ? `All courses & tools unlocked until ${new Date(user!.trialEndsAt!).toLocaleDateString()}. No automatic charge.`
+              : isPro ? 'All courses & tools unlocked' : '5 courses · Limited usage'}
+          </div>
         </div>
         <span className="text-[11px] font-semibold px-3 py-1 rounded-full" style={ isPro ? { background:'rgba(62,207,142,.15)', color:'var(--green)', border:'1px solid rgba(62,207,142,.3)' } : { background:'rgba(245,166,35,.15)', color:'var(--amber)', border:'1px solid rgba(245,166,35,.3)' }}>
-          {isPro ? 'Active' : 'Limited'}
+          {trialActive ? 'Trial active' : isPro ? 'Active' : 'Limited'}
         </span>
       </div>
 
@@ -185,7 +193,7 @@ function BillingContent() {
         {PLANS.map(p => {
           const price = cycle === 'annual' && p.id !== 'free' ? p.annual : p.monthly;
           const perMonth = cycle === 'annual' && p.id !== 'free' ? (p.annual/12).toFixed(2) : p.monthly;
-          const isCurrent = (p.id === 'free' && !isPro) || (p.id === 'pro' && isPro);
+          const isCurrent = (p.id === 'free' && !paidPlanActive) || (p.id === 'pro' && paidPlanActive);
           return (
             <div key={p.id} className={`bg-surface rounded-2xl p-6 relative ${p.popular ? 'border border-accent' : 'border border-border'}`}>
               {p.popular && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-accent text-white text-[11px] font-bold px-4 py-1 rounded-full whitespace-nowrap">Most Popular</div>}

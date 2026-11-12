@@ -12,12 +12,13 @@ import { formatLesson } from '@/lib/lessonContent';
 import toast from 'react-hot-toast';
 import StudyHistoryPanel from '@/components/study/StudyHistoryPanel';
 import { parseStudyResponse, saveStudyHistory, type StudyHistoryEntry } from '@/lib/studyHistory';
+import { isPro as hasProAccess } from '@/lib/auth';
 
 type TutorMessage = { role: 'user' | 'assistant'; content: string };
 
 export default function TutorPage() {
   const user = useStore(state => state.user);
-  const isPro = ['pro', 'annual'].includes(user?.plan || '');
+  const isPro = hasProAccess(user);
   const [courseId, setCourseId] = useState(COURSES[0].id);
   const [topic, setTopic] = useState(COURSES[0].topics[0]);
   const [messages, setMessages] = useState<TutorMessage[]>([

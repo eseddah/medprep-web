@@ -18,7 +18,7 @@ type Phase = 'setup'|'questions'|'results';
 
 export default function QuizPage() {
   const user = useStore(s => s.user);
-  const plan = user?.plan || 'free';
+  const plan = user?.effectivePlan || user?.plan || 'free';
   const maxQ = QUIZ_LIMITS[plan as keyof typeof QUIZ_LIMITS] || 10;
   const [phase, setPhase] = useState<Phase>('setup');
   const [questions, setQuestions] = useState<Question[]>([]);

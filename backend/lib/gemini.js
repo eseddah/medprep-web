@@ -1,8 +1,8 @@
 const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions';
 const AI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
 const DEFAULT_MODEL = AI_MODELS[0];
-const MAX_ATTEMPTS = 5;
-const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
+const MAX_ATTEMPTS = 2;
+const RETRY_DELAYS_MS = [350, 900];
 const FRIENDLY_ERROR = 'AI generation is temporarily unavailable. Please try again in a moment.';
 
 function isConfigured() {

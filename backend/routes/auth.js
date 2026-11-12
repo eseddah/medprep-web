@@ -23,7 +23,7 @@ router.post('/register', async (req, res) => {
   const exists = await User.findOne({ email: value.email });
   if (exists) return res.status(409).json({ error: 'Email already registered' });
 
-  const user = await User.create({ ...value, name: value.name.trim() });
+  const user = await User.create({ ...value, name: value.name.trim(), trialStartedAt: new Date() });
   res.status(201).json({ token: sign(user._id), user: user.toPublic() });
 });
 
@@ -37,6 +37,10 @@ router.post('/login', async (req, res) => {
   if (!user || !(await user.matchPassword(password)))
     return res.status(401).json({ error: 'Invalid credentials' });
 
+  if (!user.trialStartedAt) {
+    user.trialStartedAt = new Date();
+    await user.save();
+  }
   res.json({ token: sign(user._id), user: user.toPublic() });
 });
 
@@ -69,10 +73,19 @@ router.post('/google', async (req, res) => {
         email,
         emailVerified: true,
         password: crypto.randomBytes(24).toString('hex'),
+        trialStartedAt: new Date(),
       });
-    } else if (user.emailVerified !== true) {
-      user.emailVerified = true;
-      await user.save();
+    } else {
+      let changed = false;
+      if (user.emailVerified !== true) {
+        user.emailVerified = true;
+        changed = true;
+      }
+      if (!user.trialStartedAt) {
+        user.trialStartedAt = new Date();
+        changed = true;
+      }
+      if (changed) await user.save();
     }
 
     res.json({ token: sign(user._id), user: user.toPublic() });
